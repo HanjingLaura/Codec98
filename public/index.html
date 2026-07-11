@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codec98 话术编解码器</title>
+<link rel="stylesheet" href="/98.css">
+<link rel="stylesheet" href="/custom.css">
+</head>
+<body>
+<div id="desktop">
+
+  <!-- ============ 桌面快捷方式：领域切换 ============ -->
+  <div id="domain-bar"></div>
+
+  <!-- ============ 主窗口：解码器 ============ -->
+  <div class="window main-window" id="win-decoder">
+    <div class="title-bar">
+      <div class="title-bar-text" id="app-titlebar">🖥️ Codec98 话术编解码器</div>
+      <div class="title-bar-controls">
+        <button aria-label="Minimize"></button>
+        <button aria-label="Maximize"></button>
+        <button aria-label="Close"></button>
+      </div>
+    </div>
+    <div class="window-body">
+
+      <!-- 菜单栏风格的方向切换 -->
+      <menu role="tablist">
+        <li role="tab" aria-selected="true" id="tab-forward"><a href="#" id="tab-forward-text">解码模式：话术 → 人话</a></li>
+        <li role="tab" id="tab-reverse"><a href="#" id="tab-reverse-text">加密模式：人话 → 话术</a></li>
+      </menu>
+
+      <div class="window" role="tabpanel" style="margin:0">
+        <div class="window-body">
+
+          <div class="field-row" style="justify-content:space-between; margin-bottom:8px">
+            <div class="field-row">
+              <label id="label-target">目标对象：</label>
+              <select id="boss-select" style="min-width:160px">
+                <option value="">通用模式</option>
+              </select>
+              <button id="btn-new-boss">＋ 建立新档案</button>
+              <button id="btn-view-boss" style="display:none">📁 查看档案</button>
+            </div>
+            <label class="field-row" style="gap:4px">
+              <input type="checkbox" id="chk-compare">
+              <span title="同时展示通用翻译与专属翻译">并排对比模式</span>
+            </label>
+          </div>
+
+          <div class="field-row-stacked" style="margin-bottom:6px">
+            <label for="input-text" id="label-input">📥 输入待解码的原话：</label>
+            <textarea id="input-text" rows="3" placeholder=""></textarea>
+          </div>
+
+          <div class="field-row-stacked" style="margin-bottom:8px" id="row-context">
+            <label for="input-context">📎 补充背景（可选，填了解码更准）：</label>
+            <input id="input-context" type="text" placeholder="什么场合说的？之前发生了什么？">
+          </div>
+
+          <fieldset style="margin-bottom:8px">
+            <legend>回复语气档位</legend>
+            <div class="field-row tone-row">
+              <label>🛡️ 稳妥</label>
+              <input type="range" id="tone-slider" min="0" max="2" value="1" step="1" style="flex:1">
+              <label>🔥 勇</label>
+              <span class="tone-label" id="tone-label">当前：不卑不亢</span>
+            </div>
+          </fieldset>
+
+          <div class="field-row" style="justify-content:flex-end">
+            <button id="btn-decode" class="default-btn">▶ 开始解码</button>
+          </div>
+
+          <div id="progress-area" style="display:none; margin-top:8px">
+            <div class="status-bar-field" id="progress-text">正在接入语料数据库…</div>
+            <progress id="progress-bar" max="100" value="10" style="width:100%"></progress>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 结果区（动态插入报告窗口） ============ -->
+  <div id="result-area"></div>
+
+  <!-- ============ 目标人物档案卡窗口 ============ -->
+  <div class="window boss-window" id="win-boss" style="display:none">
+    <div class="title-bar">
+      <div class="title-bar-text">📁 目标人物档案 — CONFIDENTIAL</div>
+      <div class="title-bar-controls"><button aria-label="Close" onclick="hideBossWindow()"></button></div>
+    </div>
+    <div class="window-body" id="boss-card-body"></div>
+  </div>
+
+  <!-- ============ 鉴定测试弹窗 ============ -->
+  <div class="window quiz-window" id="win-quiz" style="display:none">
+    <div class="title-bar">
+      <div class="title-bar-text" id="quiz-titlebar">🔬 类型鉴定程序 — TYPE_SCAN.EXE</div>
+      <div class="title-bar-controls"><button aria-label="Close" onclick="closeQuiz()"></button></div>
+    </div>
+    <div class="window-body" id="quiz-body"></div>
+  </div>
+
+  <!-- ============ 纠错弹窗 ============ -->
+  <div class="window correct-window" id="win-correct" style="display:none">
+    <div class="title-bar">
+      <div class="title-bar-text">✏️ 向数据库提交更正</div>
+      <div class="title-bar-controls"><button aria-label="Close" onclick="closeCorrect()"></button></div>
+    </div>
+    <div class="window-body">
+      <p style="margin:4px 0">AI 翻译不准？告诉解码器<b>实际的意思</b>，下次会更准：</p>
+      <textarea id="correct-text" rows="3" style="width:100%" placeholder="实际上的意思是……"></textarea>
+      <div class="field-row" style="justify-content:flex-end; margin-top:8px">
+        <button onclick="closeCorrect()">取消</button>
+        <button class="default-btn" id="btn-submit-correct">提交更正</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlay" style="display:none"></div>
+
+  <!-- ============ 任务栏 ============ -->
+  <div id="taskbar">
+    <button id="start-btn">🖥️ 开始</button>
+    <div class="taskbar-item" id="taskbar-app">Codec98</div>
+    <div style="flex:1"></div>
+    <div class="status-bar-field" id="taskbar-status">已解码 0 条语录</div>
+    <div class="status-bar-field" id="taskbar-mode">演示模式</div>
+    <div class="status-bar-field" id="clock"></div>
+  </div>
+
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
