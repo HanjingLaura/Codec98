@@ -8,6 +8,29 @@
 <link rel="stylesheet" href="/custom.css">
 </head>
 <body>
+
+<!-- ============ 开机封面（入口） ============ -->
+<div id="boot-screen">
+  <pre id="boot-log"></pre>
+  <div class="window boot-window" id="boot-window" style="display:none">
+    <div class="title-bar">
+      <div class="title-bar-text">💾 CODEC98.SYS — 系统就绪</div>
+    </div>
+    <div class="window-body" style="text-align:center">
+      <div class="boot-logo">Codec98</div>
+      <div class="boot-tagline">人类语言协议转换器 · v1.0</div>
+      <div class="boot-icons">🖥️ 💘 🪤 🌐</div>
+      <div class="boot-features">
+        <div>🔍 DECODE —— 输入对方原话，输出潜台词 + 回复草稿</div>
+        <div>🔐 ENCODE —— 输入你的真心话，输出得体表达</div>
+        <div>📈 UPGRADE —— 建档纠错，解码器随使用升级</div>
+      </div>
+      <button class="default-btn boot-enter-btn" id="btn-enter">▶ 开始使用</button>
+      <div class="boot-hint">按 Enter 键也可进入</div>
+    </div>
+  </div>
+</div>
+
 <div id="desktop">
 
   <!-- ============ 桌面快捷方式：领域切换 ============ -->

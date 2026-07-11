@@ -338,7 +338,7 @@ function openQuiz() {
     ${d.quiz.map((item, qi) => `
       <div class="quiz-q"><div class="q-title">${item.q}</div>
         ${item.opts.map(([label], oi) => `
-          <label><input type="radio" name="q${qi}" value="${oi}"> ${label}</label>`).join('')}
+          <div class="field-row"><input type="radio" id="q${qi}-o${oi}" name="q${qi}" value="${oi}"><label for="q${qi}-o${oi}">${label}</label></div>`).join('')}
       </div>`).join('')}
     <div class="field-row" style="margin-bottom:8px">
       <label>口头禅（可选，逗号分隔）：</label><input type="text" id="quiz-phrases" style="flex:1" placeholder="如：格局打开, 随便">
@@ -455,10 +455,64 @@ window.hideBossWindow = function () {
   $('overlay').style.display = 'none'; $('win-boss').style.display = 'none';
 };
 
+/* ================= 开机封面（BIOS 自检 → 欢迎窗口） ================= */
+const BOOT_LINES = [
+  ['CODEC98 BIOS v1.0 — 话术编解码固件', ''],
+  ['Memory Test: 640K', 'OK'],
+  ['Loading CORPUS.DAT ...........', 'OK'],
+  ['Loading BOSS_DECODER.EXE .....', 'OK'],
+  ['Loading LOVE_DECODER.EXE .....', 'OK'],
+  ['Loading CLIENT_DECODER.EXE ...', 'OK'],
+  ['Loading JARGON_DECODER.EXE ...', 'OK'],
+  ['潜台词引擎初始化 .............', 'OK'],
+];
+
+function runBootSequence() {
+  const log = $('boot-log');
+  let i = 0, skipped = false;
+
+  const showWindow = () => {
+    if ($('boot-window').style.display !== 'none') return;
+    $('boot-window').style.display = '';
+    $('btn-enter').focus();
+  };
+  const skip = () => { skipped = true; showWindow(); };
+
+  const typeNext = () => {
+    if (skipped) return;
+    if (i >= BOOT_LINES.length) { setTimeout(showWindow, 250); return; }
+    const [text, status] = BOOT_LINES[i++];
+    log.innerHTML = log.innerHTML.replace('<span class="cursor">_</span>', '')
+      + esc(text) + (status ? ` [<span class="ok">${status}</span>]` : '') + '\n'
+      + '<span class="cursor">_</span>';
+    setTimeout(typeNext, 120 + Math.random() * 130);
+  };
+  typeNext();
+
+  // 日志阶段点击任意处跳过；Enter / 按钮进入桌面
+  log.onclick = skip;
+  $('btn-enter').onclick = enterDesktop;
+  document.addEventListener('keydown', function onEnter(e) {
+    if (!document.getElementById('boot-screen')) { document.removeEventListener('keydown', onEnter); return; }
+    if (e.key !== 'Enter') return;
+    if ($('boot-window').style.display === 'none') { skip(); return; }
+    document.removeEventListener('keydown', onEnter);
+    enterDesktop();
+  });
+}
+
+function enterDesktop() {
+  sfxDing(); // 首次用户手势，顺带解锁 WebAudio
+  const boot = $('boot-screen');
+  boot.classList.add('fade-out');
+  setTimeout(() => boot.remove(), 500);
+}
+
 /* ================= 任务栏时钟 ================= */
 function tickClock() {
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+runBootSequence(); // 封面先跑，数据加载在其背后并行完成
 init();

@@ -8,6 +8,7 @@
 
 * { box-sizing: border-box; }
 
+
 html, body {
   margin: 0; padding: 0;
   background: var(--win98-teal);
@@ -177,7 +178,8 @@ textarea, input[type=text] { font-family: inherit; font-size: 13px; }
 /* 鉴定测试 */
 .quiz-q { margin-bottom: 12px; }
 .quiz-q .q-title { font-weight: bold; margin-bottom: 4px; }
-.quiz-q label { display: block; margin: 3px 0; cursor: pointer; }
+.quiz-q .field-row { margin: 3px 0 3px 2px; }
+.quiz-q label { cursor: pointer; }
 
 /* 任务栏 */
 #taskbar {
@@ -199,3 +201,55 @@ textarea, input[type=text] { font-family: inherit; font-size: 13px; }
 
 /* 演示模式角标 */
 .src-tag { font-size: 11px; color: #666; text-align: right; margin-top: 4px; }
+
+/* ---------- 开机封面（BIOS 自检 + 欢迎窗口） ---------- */
+#boot-screen {
+  position: fixed; inset: 0; z-index: 100;
+  background: #000;
+  display: flex; align-items: center; justify-content: center;
+}
+#boot-screen.fade-out { animation: bootfade .45s ease-in forwards; }
+@keyframes bootfade { to { opacity: 0; visibility: hidden; } }
+
+#boot-log {
+  position: absolute; top: 18px; left: 24px; right: 24px;
+  margin: 0; padding: 0;
+  background: transparent; border: none; box-shadow: none;
+  color: #b8b8b8;
+  font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.55;
+  white-space: pre-wrap; cursor: pointer;
+}
+#boot-log .ok { color: #4be34b; }
+#boot-log .cursor { animation: blink .6s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+.boot-window {
+  width: min(430px, 92vw); margin: 0; position: relative; z-index: 2;
+  box-shadow: 6px 6px 0 rgba(255,255,255,.15);
+  animation: winpop .25s ease-out;
+}
+.boot-logo {
+  font-size: 40px; font-weight: bold; letter-spacing: 2px;
+  margin: 12px 0 2px;
+  color: var(--win98-teal);
+  text-shadow: 2px 2px 0 rgba(0,0,0,.2);
+}
+.boot-tagline { font-size: 13px; margin-bottom: 10px; }
+.boot-icons {
+  font-size: 26px; letter-spacing: 10px; margin-bottom: 12px;
+  filter: drop-shadow(2px 2px 0 rgba(0,0,0,.25));
+}
+.boot-features {
+  text-align: left; display: inline-block;
+  font-size: 12px; line-height: 2;
+  border: 1px inset #808080; background: #fff;
+  padding: 6px 14px; margin-bottom: 14px;
+}
+.boot-enter-btn {
+  display: block; margin: 0 auto 6px;
+  min-width: 180px; font-size: 15px; padding: 6px 0;
+  animation: enterblink 1.6s steps(2) infinite;
+}
+@keyframes enterblink { 50% { outline: 1px dotted #000; outline-offset: -6px; } }
+.boot-hint { font-size: 11px; color: #666; margin-bottom: 8px; }
+
