@@ -4,9 +4,16 @@
   --win98-teal: #008080;
   --accent-red: #aa0000;
   --pixel-border: #0a0a0a;
+  /* 声明纯浅色方案：阻止安卓浏览器"强制深色"给银灰 UI 蒙上一层灰雾 */
+  color-scheme: light only;
 }
 
 * { box-sizing: border-box; }
+
+/* 复古细节：Win98 式选区反白与虚线焦点框，去掉移动端点击灰色高光 */
+::selection { background: #000080; color: #fff; }
+button, a, li[role=tab] { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible { outline: 1px dotted #0a0a0a; outline-offset: -4px; }
 
 
 html, body {
@@ -14,6 +21,8 @@ html, body {
   background: var(--win98-teal);
   min-height: 100vh;
   font-size: 13px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 #desktop {
@@ -28,11 +37,15 @@ html, body {
 /* ---------- 领域切换：桌面快捷方式 ---------- */
 #domain-bar {
   display: flex; gap: 14px; margin-bottom: 14px;
+  overflow-x: auto;               /* 窄屏横向滑动，不挤压不溢出 */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+#domain-bar::-webkit-scrollbar { display: none; }
 .domain-icon {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   background: transparent; border: 1px dotted transparent;
-  min-width: 96px; padding: 8px 6px;
+  min-width: 96px; flex-shrink: 0; padding: 8px 6px;
   box-shadow: none; cursor: pointer;
   color: #fff; text-shadow: 1px 1px 0 rgba(0,0,0,.7);
 }
@@ -181,6 +194,78 @@ textarea, input[type=text] { font-family: inherit; font-size: 13px; }
 .quiz-q .field-row { margin: 3px 0 3px 2px; }
 .quiz-q label { cursor: pointer; }
 
+/* ---------- 连续对话 CHAT_98 ---------- */
+#chat-log {
+  height: 340px; overflow-y: auto;
+  background: #fff; border: 1px inset #808080;
+  padding: 10px 8px;
+}
+.chat-empty { color: #777; font-size: 12px; text-align: center; padding: 24px 12px; }
+.chat-hint { font-size: 11px; color: #666; }
+
+.chat-msg { display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-start; }
+.chat-msg.me { flex-direction: row-reverse; }
+.chat-avatar {
+  width: 36px; height: 36px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: bold; background: #d4d0c8;
+  border: 2px solid var(--pixel-border);
+  box-shadow: 2px 2px 0 rgba(0,0,0,.25);
+}
+.chat-msg.me .chat-avatar { background: #cfe0cf; }
+.chat-body { max-width: 78%; min-width: 0; }
+.chat-msg.me .chat-body { display: flex; flex-direction: column; align-items: flex-end; }
+.chat-bubble {
+  display: inline-block; padding: 6px 10px;
+  border: 2px solid var(--pixel-border);
+  background: #fffef2; box-shadow: 2px 2px 0 rgba(0,0,0,.2);
+  word-break: break-word;
+}
+.chat-msg.me .chat-bubble { background: #e4f0e4; }
+
+.chat-decoded {
+  margin-top: 4px; padding: 6px 8px;
+  border: 1px dashed #888; background: #f6f6ff;
+  font-size: 12px;
+}
+.chat-decoded.literal { border-color: #227722; background: #f0fff0; }
+.chat-itp { margin-bottom: 4px; }
+.chat-itp.secondary { color: #445588; }
+.chat-draft {
+  background: #fff; border: 1px dotted #999;
+  padding: 4px 6px; margin-top: 3px;
+  font-family: 'Courier New', monospace;
+}
+.chat-use-btn { font-size: 11px; margin-left: 6px; min-height: 18px; padding: 0 6px; }
+.chat-probe { color: #886600; margin-top: 3px; }
+
+/* ---------- 弦外之音BBS ---------- */
+#forum-list { max-height: 460px; overflow-y: auto; }
+.forum-post {
+  border: 2px solid var(--pixel-border);
+  background: #fffef2;
+  padding: 8px 10px; margin-bottom: 10px;
+  box-shadow: 3px 3px 0 rgba(0,0,0,.25);
+}
+.forum-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px; }
+.forum-avatar { font-size: 18px; }
+.forum-tag { background: var(--pixel-border); color: #fff; padding: 0 6px; font-size: 11px; }
+.forum-time { margin-left: auto; color: #888; font-size: 11px; }
+.forum-original { font-weight: bold; background: #fff; border: 1px inset #808080; padding: 5px 8px; margin-bottom: 6px; }
+.forum-scene { font-size: 12px; color: #666; margin-bottom: 4px; }
+.forum-subtext { margin-bottom: 4px; }
+.forum-advice { font-size: 12px; color: #225522; margin-bottom: 4px; }
+.forum-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 4px; }
+.forum-adopted { color: #227722; font-weight: bold; font-size: 12px; }
+
+.post-window {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 94vw); max-height: 88vh; overflow: auto;
+  z-index: 30; margin: 0;
+  box-shadow: 6px 6px 0 rgba(0,0,0,.45);
+}
+
 /* 任务栏 */
 #taskbar {
   position: fixed; bottom: 0; left: 0; right: 0;
@@ -252,4 +337,48 @@ textarea, input[type=text] { font-family: inherit; font-size: 13px; }
 }
 @keyframes enterblink { 50% { outline: 1px dotted #000; outline-offset: -6px; } }
 .boot-hint { font-size: 11px; color: #666; margin-bottom: 8px; }
+
+/* ---------- 移动端适配 ---------- */
+@media (max-width: 640px) {
+  #desktop { padding: 12px 8px 56px; }
+  #domain-bar { gap: 6px; margin-bottom: 10px; }
+  .domain-icon { min-width: 78px; padding: 6px 4px; }
+  .domain-icon .di-emoji { font-size: 28px; }
+
+  /* 菜单栏 tab 允许换行，不挤成竖排字 */
+  menu[role=tablist] { flex-wrap: wrap; row-gap: 2px; }
+
+  /* 目标对象行：纵向排布，避免「并排对比」标签被挤成竖条溢出屏幕 */
+  #row-target { flex-direction: column; align-items: stretch; gap: 6px; }
+  #row-target > .field-row { flex-wrap: wrap; }
+  #boss-select { flex: 1; min-width: 0 !important; }
+  #row-compare { justify-content: flex-start; }
+
+  .tone-label { min-width: 0; }
+
+  /* 手指友好的点击面积（Win98 视觉不变，只加内边距） */
+  button { min-height: 30px; }
+  .title-bar-controls button { min-height: 0; }
+  .chat-use-btn { min-height: 22px; }
+  input[type=text], textarea, select { font-size: 16px; } /* 防 iOS 聚焦自动放大 */
+
+  /* 弹窗贴合小屏 */
+  .boss-window, .quiz-window, .correct-window, .post-window {
+    width: 96vw; max-height: 90vh;
+  }
+
+  /* 结果区仪表上下排 */
+  .meter { min-width: 100%; }
+
+  #chat-log { height: 300px; }
+  .chat-body { max-width: 84%; }
+
+  /* 任务栏收紧 */
+  #taskbar { gap: 4px; padding: 2px 4px; font-size: 11px; }
+  #taskbar .status-bar-field { padding: 1px 5px; }
+  #taskbar-app { display: none; }
+
+  .boot-logo { font-size: 32px; }
+  #boot-log { font-size: 11px; top: 10px; left: 12px; right: 12px; }
+}
 

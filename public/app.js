@@ -7,14 +7,30 @@ const state = {
   provider: null,     // 'dashscope' | 'anthropic' | null
   bosses: [],
   currentBossId: '',
-  direction: 'forward',
+  mode: 'forward',    // forward | reverse | chat | forum
   tone: 'neutral',
   decodeCount: 0,
   lastResult: null,   // {原话, AI翻译, bossId, direction}
+  chatId: '',         // 当前会话 id
+  chatSessions: [],
 };
 const TONES = ['safe', 'neutral', 'brave'];
 const TONE_NAMES = { safe: '稳妥', neutral: '不卑不亢', brave: '勇 🔥' };
 const $ = id => document.getElementById(id);
+
+// 统一请求入口：非 2xx / 网络失败都抛出带可读信息的错误，调用方决定怎么提示
+async function api(url, opts) {
+  let r;
+  try { r = await fetch(url, opts); }
+  catch { throw new Error('网络请求失败，请确认服务是否在运行'); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `请求失败（${r.status}）`);
+  return data;
+}
+const apiPost = (url, body) => api(url, {
+  method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify(body)
+});
 
 /* ================= 8-bit 音效（WebAudio，无素材依赖） ================= */
 let audioCtx = null;
@@ -41,7 +57,7 @@ async function init() {
   const r = await fetch('/api/domains').then(r => r.json());
   state.domains = r.domains;
   state.provider = r.provider;
-  $('taskbar-mode').textContent = r.provider ? `⚡ LLM在线（${r.provider}）` : '⚙ 演示模式';
+  $('taskbar-mode').textContent = r.provider ? `⚡ LLM在线（${r.provider}）` : '⚙ 本地引擎';
   renderDomainBar();
   await switchDomain(state.domains[0].id, true);
   bindEvents();
@@ -77,6 +93,8 @@ window.switchDomain = async function (id, silent) {
   applyDirectionTexts();
 
   await loadBosses();
+  if (state.mode === 'chat') { state.chatId = ''; loadChatSessions(); }
+  if (state.mode === 'forum') initForumDomainSelect();
   if (!silent) sfxCard();
 };
 
@@ -93,9 +111,14 @@ async function loadBosses(selectId) {
 }
 
 function bindEvents() {
-  $('tab-forward').onclick = () => setDirection('forward');
-  $('tab-reverse').onclick = () => setDirection('reverse');
-  $('boss-select').onchange = e => { state.currentBossId = e.target.value; updateBossButtons(); sfxClick(); };
+  $('tab-forward').onclick = () => setMode('forward');
+  $('tab-reverse').onclick = () => setMode('reverse');
+  $('tab-chat').onclick = () => setMode('chat');
+  $('tab-forum').onclick = () => setMode('forum');
+  $('boss-select').onchange = e => {
+    state.currentBossId = e.target.value; updateBossButtons(); sfxClick();
+    if (state.mode === 'chat') loadChatSessions();
+  };
   $('tone-slider').oninput = e => {
     state.tone = TONES[+e.target.value];
     $('tone-label').textContent = '当前：' + TONE_NAMES[state.tone];
@@ -106,23 +129,44 @@ function bindEvents() {
   $('btn-view-boss').onclick = () => showBossWindow(state.currentBossId);
   $('btn-submit-correct').onclick = submitCorrection;
   $('input-text').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doDecode(); };
+  // 连续对话
+  $('btn-new-chat').onclick = () => createChatSession();
+  $('chat-select').onchange = e => { state.chatId = e.target.value; renderChatLog(); sfxClick(); };
+  $('btn-send-them').onclick = () => sendChat('them');
+  $('btn-send-me').onclick = () => sendChat('me');
+  $('chat-input').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) sendChat('them'); };
+  // BBS
+  $('btn-new-post').onclick = openPost;
+  $('btn-submit-post').onclick = submitPost;
+  $('forum-domain').onchange = () => loadForum();
 }
 
 function applyDirectionTexts() {
-  const d = state.domain, dir = state.direction;
-  $('label-input').textContent = dir === 'forward'
-    ? '📥 输入待解码的原话：'
-    : '📤 输入你的真心话（我来帮你加密成得体表达）：';
-  $('input-text').placeholder = dir === 'forward' ? d.inputPlaceholder : d.reversePlaceholder;
-  $('row-context').style.display = dir === 'forward' ? '' : 'none';
-  $('chk-compare').parentElement.style.display = dir === 'forward' ? '' : 'none';
+  const d = state.domain, dir = state.mode;
+  if (dir === 'forward' || dir === 'reverse') {
+    $('label-input').textContent = dir === 'forward'
+      ? '📥 输入待解码的原话：'
+      : '📤 输入你的真心话（我来帮你加密成得体表达）：';
+    $('input-text').placeholder = dir === 'forward' ? d.inputPlaceholder : d.reversePlaceholder;
+    $('row-context').style.display = dir === 'forward' ? '' : 'none';
+  }
+  $('row-compare').style.display = dir === 'forward' ? '' : 'none';
 }
 
-function setDirection(d) {
-  state.direction = d;
-  $('tab-forward').setAttribute('aria-selected', d === 'forward');
-  $('tab-reverse').setAttribute('aria-selected', d === 'reverse');
+function setMode(m) {
+  state.mode = m;
+  for (const t of ['forward', 'reverse', 'chat', 'forum']) {
+    $('tab-' + t).setAttribute('aria-selected', m === t);
+  }
+  $('panel-decode').style.display = (m === 'forward' || m === 'reverse') ? '' : 'none';
+  $('panel-chat').style.display = m === 'chat' ? '' : 'none';
+  $('panel-forum').style.display = m === 'forum' ? '' : 'none';
+  // BBS是公共板块，不区分目标人物；语气档位对论坛无意义
+  $('row-target').style.display = m === 'forum' ? 'none' : '';
+  $('row-tone').style.display = m === 'forum' ? 'none' : '';
   applyDirectionTexts();
+  if (m === 'chat') loadChatSessions();
+  if (m === 'forum') initForumDomainSelect();
   sfxClick();
 }
 
@@ -134,13 +178,13 @@ function updateBossButtons() {
 async function doDecode() {
   const text = $('input-text').value.trim();
   if (!text) return alert('请先输入内容');
-  const compare = $('chk-compare').checked && state.currentBossId && state.direction === 'forward';
+  const compare = $('chk-compare').checked && state.currentBossId && state.mode === 'forward';
 
   showProgress();
   const body = {
     domainId: state.domain.id,
     text, context: $('input-context').value.trim(),
-    direction: state.direction, tone: state.tone,
+    direction: state.mode, tone: state.tone,
     bossId: state.currentBossId || null, compare
   };
   let data;
@@ -230,7 +274,7 @@ function reportWindow(titleText, inner) {
 }
 
 function srcTag(source) {
-  return source === 'demo' ? '⚙ 演示模式输出' : `⚡ LLM 实时解码（${String(source).replace('llm:', '')}）`;
+  return source === 'demo' ? '⚙ 本地引擎输出' : `⚡ LLM 实时解码（${String(source).replace('llm:', '')}）`;
 }
 
 function renderReport(text, result) {
@@ -238,10 +282,10 @@ function renderReport(text, result) {
     原话: text,
     AI翻译: result.literal ? result.literalNote : (result.interpretations?.[0]?.潜台词 || ''),
     bossId: result._boss?.id || null,
-    direction: state.direction
+    direction: state.mode
   };
   const bossTag = result._boss ? `｜目标：${esc(result._boss.name)}` : '｜通用模式';
-  const dirName = state.direction === 'reverse' ? '📤 加密报告' : '📄 解码分析报告';
+  const dirName = state.mode === 'reverse' ? '📤 加密报告' : '📄 解码分析报告';
   const feedbackRow = result._boss && !result.literal ? `
     <div class="feedback-row">
       <button onclick="sendFeedback(true)">👍 翻译准</button>
@@ -461,9 +505,11 @@ const BOOT_LINES = [
   ['Memory Test: 640K', 'OK'],
   ['Loading CORPUS.DAT ...........', 'OK'],
   ['Loading BOSS_DECODER.EXE .....', 'OK'],
-  ['Loading LOVE_DECODER.EXE .....', 'OK'],
   ['Loading CLIENT_DECODER.EXE ...', 'OK'],
   ['Loading JARGON_DECODER.EXE ...', 'OK'],
+  ['Loading LOVE_DECODER.EXE .....', 'OK'],
+  ['Loading CHAT_98.EXE ..........', 'OK'],
+  ['Mounting 弦外之音BBS .........', 'OK'],
   ['潜台词引擎初始化 .............', 'OK'],
 ];
 
@@ -506,6 +552,236 @@ function enterDesktop() {
   const boot = $('boot-screen');
   boot.classList.add('fade-out');
   setTimeout(() => boot.remove(), 500);
+}
+
+/* ================= 连续对话 CHAT_98 ================= */
+function chatAvatars() {
+  const boss = state.bosses.find(b => b.id === state.currentBossId);
+  return { them: boss ? boss.name.slice(0, 1) : 'TA', me: '我', themName: boss ? boss.name : `对方（${state.domain.targetNoun}）` };
+}
+
+async function loadChatSessions() {
+  const q = `domainId=${state.domain.id}&bossId=${state.currentBossId || ''}`;
+  let r;
+  try { r = await api(`/api/chats?${q}`); }
+  catch (e) {
+    $('chat-log').innerHTML = `<div class="chat-empty">会话加载失败：${esc(e.message)}</div>`;
+    return;
+  }
+  state.chatSessions = r.sessions;
+  const sel = $('chat-select');
+  sel.innerHTML = r.sessions.length
+    ? r.sessions.map(s => `<option value="${s.id}">${esc(s.title)}（${s.count}条）</option>`).join('')
+    : '<option value="">（还没有会话，点「＋ 新会话」开始）</option>';
+  if (!r.sessions.find(s => s.id === state.chatId)) state.chatId = r.sessions[0]?.id || '';
+  sel.value = state.chatId;
+  renderChatLog();
+}
+
+async function createChatSession() {
+  let r;
+  try { r = await apiPost('/api/chats', { domainId: state.domain.id, bossId: state.currentBossId || null }); }
+  catch (e) { return alert('新建会话失败：' + e.message); }
+  state.chatId = r.session.id;
+  sfxCard();
+  await loadChatSessions();
+  $('chat-input').focus();
+}
+
+function chatDecodedHTML(d) {
+  if (!d) return '';
+  if (d.literal) return `<div class="chat-decoded literal">无言外之意：${esc(d.literalNote)}</div>`;
+  const itps = (d.interpretations || []).map((itp, i) => `
+    <div class="chat-itp ${i > 0 ? 'secondary' : ''}">
+      <b>${esc(itp.label)}</b> ${esc(itp.潜台词)}
+      ${itp.回复草稿 ? `<div class="chat-draft">${esc(itp.回复草稿)}
+        <button class="chat-use-btn" onclick="useDraft(this)" data-draft="${esc(itp.回复草稿)}">用这句回</button></div>` : ''}
+    </div>`).join('');
+  const probe = d.探口风建议 ? `<div class="chat-probe">试探建议：${esc(d.探口风建议)}</div>` : '';
+  // 本地引擎不具备上下文能力，如实标注，避免用户误以为解读参考了对话历史
+  const srcNote = d._source === 'demo' ? '<div class="src-tag">本地引擎输出（未结合对话历史）</div>' : '';
+  return `<div class="chat-decoded">${itps}${probe}${srcNote}</div>`;
+}
+
+function chatMsgHTML(m, av) {
+  return `
+    <div class="chat-msg ${m.role}">
+      <div class="chat-avatar" title="${m.role === 'them' ? esc(av.themName) : '我'}">${esc(m.role === 'them' ? av.them : av.me)}</div>
+      <div class="chat-body">
+        <div class="chat-bubble">${esc(m.text)}</div>
+        ${m.role === 'them' ? chatDecodedHTML(m.decoded) : ''}
+      </div>
+    </div>`;
+}
+
+async function renderChatLog() {
+  const log = $('chat-log');
+  if (!state.chatId) {
+    log.innerHTML = '<div class="chat-empty">还没有消息。把对方发来的话贴进下面，解码器会结合整段对话帮你分析。</div>';
+    return;
+  }
+  let r;
+  try { r = await api(`/api/chats/${state.chatId}`); }
+  catch (e) {
+    log.innerHTML = `<div class="chat-empty">消息加载失败：${esc(e.message)}</div>`;
+    return;
+  }
+  if (!r.session) return;
+  const av = chatAvatars();
+  log.innerHTML = r.session.messages.length ? r.session.messages.map(m => chatMsgHTML(m, av)).join('')
+    : '<div class="chat-empty">会话已建立。把对方发来的话贴进下面开始解码。</div>';
+  log.scrollTop = log.scrollHeight;
+}
+
+// 发送后只追加新消息，不重拉整个会话重渲染（消息多时会越来越卡）
+function appendChatMsg(msg) {
+  const log = $('chat-log');
+  log.querySelector('.chat-empty')?.remove();
+  log.insertAdjacentHTML('beforeend', chatMsgHTML(msg, chatAvatars()));
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat(role) {
+  const text = $('chat-input').value.trim();
+  if (!text) return alert('请先输入内容');
+  if (!state.chatId) await createChatSession();
+  if (role === 'them') $('chat-progress').style.display = '';
+  $('btn-send-them').disabled = $('btn-send-me').disabled = true;
+  try {
+    const r = await apiPost(`/api/chats/${state.chatId}/message`, { role, text, tone: state.tone });
+    $('chat-input').value = '';
+    if (role === 'them') { sfxDing(); state.decodeCount++; $('taskbar-status').textContent = `已解码 ${state.decodeCount} 条语录`; }
+    else sfxClick();
+    // 只追加这条新消息并更新会话下拉的标题/条数，不重拉整个会话列表+消息重渲染
+    appendChatMsg(r.message);
+    const s = state.chatSessions.find(x => x.id === state.chatId);
+    if (s) {
+      s.title = r.session.title; s.count++;
+      const opt = $('chat-select').querySelector(`option[value="${state.chatId}"]`);
+      if (opt) opt.textContent = `${s.title}（${s.count}条）`;
+    }
+  } catch (e) {
+    alert('发送失败：' + e.message);
+  } finally {
+    $('chat-progress').style.display = 'none';
+    $('btn-send-them').disabled = $('btn-send-me').disabled = false;
+    $('chat-input').focus();
+  }
+}
+
+window.useDraft = function (btn) {
+  $('chat-input').value = btn.dataset.draft;
+  navigator.clipboard?.writeText(btn.dataset.draft);
+  sfxClick();
+  $('chat-input').focus();
+};
+
+/* ================= 弦外之音BBS ================= */
+function initForumDomainSelect() {
+  const sel = $('forum-domain');
+  if (!sel.options.length) {
+    sel.innerHTML = `<option value="">全部板块</option>` +
+      state.domains.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+  }
+  sel.value = state.domain.id;
+  loadForum();
+}
+
+async function loadForum() {
+  const domainId = $('forum-domain').value;
+  let r;
+  try { r = await api(`/api/forum${domainId ? '?domainId=' + domainId : ''}`); }
+  catch (e) {
+    $('forum-list').innerHTML = `<div class="chat-empty">帖子加载失败：${esc(e.message)}</div>`;
+    return;
+  }
+  const domainMap = Object.fromEntries(state.domains.map(d => [d.id, d]));
+  $('forum-list').innerHTML = r.posts.length ? r.posts.map(p => {
+    const d = domainMap[p.domainId];
+    return `
+    <div class="forum-post">
+      <div class="forum-head">
+        <b>${esc(p.author)}</b>
+        <span class="forum-tag">${d ? esc(d.name) : ''}</span>
+        <span class="forum-time">${(p.time || '').slice(0, 10)}</span>
+      </div>
+      <div class="forum-original">「${esc(p.原话)}」</div>
+      ${p.场景 ? `<div class="forum-scene">场景：${esc(p.场景)}</div>` : ''}
+      <div class="forum-subtext"><b>言外之意：</b>${esc(p.潜台词)}</div>
+      ${p.应对 ? `<div class="forum-advice"><b>应对经验：</b>${esc(p.应对)}</div>` : ''}
+      <div class="forum-actions">
+        <button onclick="likeForumPost('${p.id}', this)">有共鸣（${p.likes || 0}）</button>
+        ${p.adopted
+          ? `<button onclick="unadoptForumPost('${p.id}')" title="从我的语料库移除，之后解码不再参考">✓ 已收入语料库（点击取消）</button>`
+          : `<button onclick="adoptForumPost('${p.id}')">收入我的语料库</button>`}
+      </div>
+    </div>`;
+  }).join('') : '<div class="chat-empty">这个板块还没有帖子，来发第一帖吧。</div>';
+}
+
+window.likeForumPost = async function (id, btn) {
+  btn.disabled = true;
+  try {
+    const r = await apiPost(`/api/forum/${id}/like`);
+    if (r.post) btn.textContent = `有共鸣（${r.post.likes}）`;
+    sfxClick();
+  } catch (e) {
+    btn.disabled = false;
+    alert('点赞失败：' + e.message);
+  }
+};
+
+window.adoptForumPost = async function (id) {
+  try {
+    const r = await apiPost(`/api/forum/${id}/adopt`);
+    if (r.post) {
+      sfxCard();
+      alert('✓ 已收入本地语料库\n之后该领域的每次解码都会参考这条真实案例');
+      loadForum();
+    }
+  } catch (e) {
+    alert('收入失败：' + e.message);
+  }
+};
+
+window.unadoptForumPost = async function (id) {
+  try {
+    const r = await apiPost(`/api/forum/${id}/unadopt`);
+    if (r.post) { sfxClick(); loadForum(); }
+  } catch (e) {
+    alert('取消失败：' + e.message);
+  }
+};
+
+window.openPost = function () {
+  const sel = $('post-domain');
+  sel.innerHTML = state.domains.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+  sel.value = $('forum-domain').value || state.domain.id;
+  for (const id of ['post-author', 'post-original', 'post-scene', 'post-subtext', 'post-advice']) $(id).value = '';
+  $('overlay').style.display = ''; $('win-post').style.display = '';
+  $('post-original').focus();
+  sfxClick();
+};
+window.closePost = function () {
+  $('overlay').style.display = 'none'; $('win-post').style.display = 'none';
+};
+async function submitPost() {
+  const 原话 = $('post-original').value.trim();
+  const 潜台词 = $('post-subtext').value.trim();
+  if (!原话 || !潜台词) return alert('「原话」和「言外之意」是必填的');
+  let r;
+  try {
+    r = await apiPost('/api/forum', {
+      domainId: $('post-domain').value,
+      author: $('post-author').value.trim(),
+      原话, 潜台词,
+      场景: $('post-scene').value.trim(),
+      应对: $('post-advice').value.trim()
+    });
+  } catch (e) { return alert('发布失败：' + e.message); }
+  closePost(); sfxCard();
+  $('forum-domain').value = $('post-domain').value;
+  loadForum();
 }
 
 /* ================= 任务栏时钟 ================= */

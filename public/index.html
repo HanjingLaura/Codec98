@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#008080">
 <title>Codec98 话术编解码器</title>
 <link rel="stylesheet" href="/98.css">
 <link rel="stylesheet" href="/custom.css">
@@ -19,7 +21,7 @@
     <div class="window-body" style="text-align:center">
       <div class="boot-logo">Codec98</div>
       <div class="boot-tagline">人类语言协议转换器 · v1.0</div>
-      <div class="boot-icons">🖥️ 💘 🪤 🌐</div>
+      <div class="boot-icons">🖥️ 🪤 🌐 💘</div>
       <div class="boot-features">
         <div>🔍 DECODE —— 输入对方原话，输出潜台词 + 回复草稿</div>
         <div>🔐 ENCODE —— 输入你的真心话，输出得体表达</div>
@@ -48,16 +50,18 @@
     </div>
     <div class="window-body">
 
-      <!-- 菜单栏风格的方向切换 -->
+      <!-- 菜单栏风格的模式切换 -->
       <menu role="tablist">
         <li role="tab" aria-selected="true" id="tab-forward"><a href="#" id="tab-forward-text">解码模式：话术 → 人话</a></li>
         <li role="tab" id="tab-reverse"><a href="#" id="tab-reverse-text">加密模式：人话 → 话术</a></li>
+        <li role="tab" id="tab-chat"><a href="#">连续对话 — CHAT_98</a></li>
+        <li role="tab" id="tab-forum"><a href="#">弦外之音BBS</a></li>
       </menu>
 
       <div class="window" role="tabpanel" style="margin:0">
         <div class="window-body">
 
-          <div class="field-row" style="justify-content:space-between; margin-bottom:8px">
+          <div class="field-row" style="justify-content:space-between; margin-bottom:8px" id="row-target">
             <div class="field-row">
               <label id="label-target">目标对象：</label>
               <select id="boss-select" style="min-width:160px">
@@ -66,23 +70,13 @@
               <button id="btn-new-boss">＋ 建立新档案</button>
               <button id="btn-view-boss" style="display:none">📁 查看档案</button>
             </div>
-            <label class="field-row" style="gap:4px">
+            <label class="field-row" style="gap:4px" id="row-compare">
               <input type="checkbox" id="chk-compare">
               <span title="同时展示通用翻译与专属翻译">并排对比模式</span>
             </label>
           </div>
 
-          <div class="field-row-stacked" style="margin-bottom:6px">
-            <label for="input-text" id="label-input">📥 输入待解码的原话：</label>
-            <textarea id="input-text" rows="3" placeholder=""></textarea>
-          </div>
-
-          <div class="field-row-stacked" style="margin-bottom:8px" id="row-context">
-            <label for="input-context">📎 补充背景（可选，填了解码更准）：</label>
-            <input id="input-context" type="text" placeholder="什么场合说的？之前发生了什么？">
-          </div>
-
-          <fieldset style="margin-bottom:8px">
+          <fieldset style="margin-bottom:8px" id="row-tone">
             <legend>回复语气档位</legend>
             <div class="field-row tone-row">
               <label>🛡️ 稳妥</label>
@@ -92,13 +86,62 @@
             </div>
           </fieldset>
 
-          <div class="field-row" style="justify-content:flex-end">
-            <button id="btn-decode" class="default-btn">▶ 开始解码</button>
+          <!-- 面板一：单句解码/加密 -->
+          <div id="panel-decode">
+            <div class="field-row-stacked" style="margin-bottom:6px">
+              <label for="input-text" id="label-input">📥 输入待解码的原话：</label>
+              <textarea id="input-text" rows="3" placeholder=""></textarea>
+            </div>
+
+            <div class="field-row-stacked" style="margin-bottom:8px" id="row-context">
+              <label for="input-context">📎 补充背景（可选，填了解码更准）：</label>
+              <input id="input-context" type="text" placeholder="什么场合说的？之前发生了什么？">
+            </div>
+
+            <div class="field-row" style="justify-content:flex-end">
+              <button id="btn-decode" class="default-btn">▶ 开始解码</button>
+            </div>
+
+            <div id="progress-area" style="display:none; margin-top:8px">
+              <div class="status-bar-field" id="progress-text">正在接入语料数据库…</div>
+              <progress id="progress-bar" max="100" value="10" style="width:100%"></progress>
+            </div>
           </div>
 
-          <div id="progress-area" style="display:none; margin-top:8px">
-            <div class="status-bar-field" id="progress-text">正在接入语料数据库…</div>
-            <progress id="progress-bar" max="100" value="10" style="width:100%"></progress>
+          <!-- 面板二：连续对话 CHAT_98 -->
+          <div id="panel-chat" style="display:none">
+            <div class="field-row" style="margin-bottom:6px">
+              <label>会话：</label>
+              <select id="chat-select" style="flex:1"></select>
+              <button id="btn-new-chat">＋ 新会话</button>
+            </div>
+            <div id="chat-log"><div class="chat-empty">还没有消息。把对方发来的话贴进下面，解码器会结合整段对话帮你分析。</div></div>
+            <div class="field-row-stacked" style="margin:8px 0 6px">
+              <textarea id="chat-input" rows="2" placeholder="粘贴对方的消息，或输入你准备发出的话…"></textarea>
+            </div>
+            <div class="field-row" style="justify-content:space-between">
+              <span class="chat-hint">「对方说的」会自动解码；「我说的」只记录，让后续解码知道来龙去脉</span>
+              <span class="field-row" style="gap:6px">
+                <button id="btn-send-them">对方说的</button>
+                <button id="btn-send-me" class="default-btn">我说的</button>
+              </span>
+            </div>
+            <div id="chat-progress" style="display:none; margin-top:6px">
+              <div class="status-bar-field">正在结合对话上下文解码…</div>
+              <progress max="100" style="width:100%"></progress>
+            </div>
+          </div>
+
+          <!-- 面板三：弦外之音BBS -->
+          <div id="panel-forum" style="display:none">
+            <div class="field-row" style="justify-content:space-between; margin-bottom:8px">
+              <span class="field-row" style="gap:6px">
+                <label>板块：</label>
+                <select id="forum-domain"></select>
+              </span>
+              <button id="btn-new-post" class="default-btn">我也遇到过 → 发帖</button>
+            </div>
+            <div id="forum-list"></div>
           </div>
 
         </div>
@@ -139,6 +182,41 @@
       <div class="field-row" style="justify-content:flex-end; margin-top:8px">
         <button onclick="closeCorrect()">取消</button>
         <button class="default-btn" id="btn-submit-correct">提交更正</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ BBS发帖弹窗 ============ -->
+  <div class="window post-window" id="win-post" style="display:none">
+    <div class="title-bar">
+      <div class="title-bar-text">新建帖子 — 弦外之音BBS</div>
+      <div class="title-bar-controls"><button aria-label="Close" onclick="closePost()"></button></div>
+    </div>
+    <div class="window-body">
+      <p style="margin:4px 0 8px">分享一句你在生活中真实遇到的「言外之意」，帮后来人少踩坑：</p>
+      <div class="field-row" style="margin-bottom:6px">
+        <label>昵称：</label><input type="text" id="post-author" placeholder="匿名网友" style="flex:1">
+        <label>板块：</label><select id="post-domain"></select>
+      </div>
+      <div class="field-row-stacked" style="margin-bottom:6px">
+        <label>对方的原话（必填）：</label>
+        <input type="text" id="post-original" placeholder="例如：你这个想法很有意思，可以先做个PPT">
+      </div>
+      <div class="field-row-stacked" style="margin-bottom:6px">
+        <label>什么场景下说的（选填）：</label>
+        <input type="text" id="post-scene" placeholder="例如：向领导提了一个新项目建议">
+      </div>
+      <div class="field-row-stacked" style="margin-bottom:6px">
+        <label>实际的言外之意（必填）：</label>
+        <textarea id="post-subtext" rows="2" placeholder="后来我才明白，这句话真正的意思是……"></textarea>
+      </div>
+      <div class="field-row-stacked" style="margin-bottom:8px">
+        <label>你的应对经验（选填）：</label>
+        <textarea id="post-advice" rows="2" placeholder="当时怎么应对的 / 现在回头看应该怎么应对"></textarea>
+      </div>
+      <div class="field-row" style="justify-content:flex-end">
+        <button onclick="closePost()">取消</button>
+        <button class="default-btn" id="btn-submit-post">发布</button>
       </div>
     </div>
   </div>
