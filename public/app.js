@@ -17,11 +17,14 @@ const state = {
 const TONES = ['safe', 'neutral', 'brave'];
 const TONE_NAMES = { safe: '稳妥', neutral: '不卑不亢', brave: '勇 🔥' };
 const $ = id => document.getElementById(id);
+const BASE = (location.pathname === '/Codec98' || location.pathname.startsWith('/Codec98/'))
+  ? '/Codec98'
+  : '';
 
 // 统一请求入口：非 2xx / 网络失败都抛出带可读信息的错误，调用方决定怎么提示
 async function api(url, opts) {
   let r;
-  try { r = await fetch(url, opts); }
+  try { r = await fetch(BASE + url, opts); }
   catch { throw new Error('网络请求失败，请确认服务是否在运行'); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || `请求失败（${r.status}）`);
@@ -54,7 +57,7 @@ const sfxClick = () => beep([440], 0.04);
 
 /* ================= 初始化 ================= */
 async function init() {
-  const r = await fetch('/api/domains').then(r => r.json());
+  const r = await api('/api/domains');
   state.domains = r.domains;
   state.provider = r.provider;
   $('taskbar-mode').textContent = r.provider ? `⚡ LLM在线（${r.provider}）` : '⚙ 本地引擎';
@@ -100,7 +103,7 @@ window.switchDomain = async function (id, silent) {
 
 /* ================= 数据加载 ================= */
 async function loadBosses(selectId) {
-  const r = await fetch(`/api/bosses?domainId=${state.domain.id}`).then(r => r.json());
+  const r = await api(`/api/bosses?domainId=${state.domain.id}`);
   state.bosses = r.bosses;
   const sel = $('boss-select');
   sel.innerHTML = `<option value="">通用模式（未指定${state.domain.targetNoun}）</option>` +
@@ -189,10 +192,7 @@ async function doDecode() {
   };
   let data;
   try {
-    data = await fetch('/api/translate', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body)
-    }).then(r => r.json());
+    data = await apiPost('/api/translate', body);
   } catch (e) {
     hideProgress(); return alert('解码失败：' + e.message);
   }
@@ -341,13 +341,12 @@ window.copyDraft = function (btn) {
 /* ================= 反馈闭环 ================= */
 window.sendFeedback = async function (accurate) {
   if (!state.lastResult?.bossId) return;
-  const r = await fetch('/api/feedback', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...state.lastResult, 准确: accurate })
-  }).then(r => r.json());
-  sfxDing();
-  alert(accurate ? `✓ 已存入专属语料库（研究进度 Lv.${r.level}）` : '');
-  loadBosses(state.currentBossId);
+  try {
+    const r = await apiPost('/api/feedback', { ...state.lastResult, 准确: accurate });
+    sfxDing();
+    alert(accurate ? `✓ 已存入专属语料库（研究进度 Lv.${r.level}）` : '');
+    loadBosses(state.currentBossId);
+  } catch (e) { alert('反馈失败：' + e.message); }
 };
 
 window.openCorrect = function () {
@@ -361,13 +360,12 @@ window.closeCorrect = function () {
 async function submitCorrection() {
   const content = $('correct-text').value.trim();
   if (!content) return alert('请填写实际含义');
-  const r = await fetch('/api/feedback', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...state.lastResult, 准确: false, 纠正内容: content })
-  }).then(r => r.json());
-  closeCorrect(); sfxCard();
-  alert(`✓ 更正已提交数据库，标记为最高优先级参考\n研究进度提升至 Lv.${r.level}，下次解码会吸收这条纠正`);
-  loadBosses(state.currentBossId);
+  try {
+    const r = await apiPost('/api/feedback', { ...state.lastResult, 准确: false, 纠正内容: content });
+    closeCorrect(); sfxCard();
+    alert(`✓ 更正已提交数据库，标记为最高优先级参考\n研究进度提升至 Lv.${r.level}，下次解码会吸收这条纠正`);
+    loadBosses(state.currentBossId);
+  } catch (e) { alert('提交纠正失败：' + e.message); }
 }
 
 /* ================= 鉴定测试（5题 → 类型+雷达，题目来自领域配置） ================= */
@@ -420,14 +418,14 @@ window.finishQuiz = async function () {
     }
   }
   const meta = d.types[type] || { avatar: '👤', title: type };
-  const r = await fetch('/api/bosses', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
+  let r;
+  try {
+    r = await apiPost('/api/bosses', {
       domainId: d.id,
       name, type, avatar: meta.avatar, title: meta.title, radar,
       catchphrases: $('quiz-phrases').value.split(/[,，]/).map(s => s.trim()).filter(Boolean)
-    })
-  }).then(r => r.json());
+    });
+  } catch (e) { return alert('建立档案失败：' + e.message); }
   closeQuiz();
   await loadBosses(r.boss.id);
   sfxCard();
@@ -460,7 +458,9 @@ function radarSVG(radar) {
 async function showBossWindow(bossId) {
   const boss = state.bosses.find(b => b.id === bossId);
   if (!boss) return;
-  const corpus = await fetch(`/api/bosses/${bossId}/corpus`).then(r => r.json());
+  let corpus;
+  try { corpus = await api(`/api/bosses/${bossId}/corpus`); }
+  catch (e) { return alert('档案加载失败：' + e.message); }
   const corrected = corpus.entries.filter(e => e.被纠正);
   $('boss-card-body').innerHTML = `
     <div class="boss-card">

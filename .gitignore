@@ -1,5 +1,6 @@
 # 密钥配置——绝不入库（模板用 .env.example）
 .env
+.vercel/
 
 # 用户真实积累（档案/纠错语料/会话/论坛）——本地持久化，不入库
 data/user/
@@ -17,3 +18,4 @@ desktop.ini
 # 编辑器
 .vscode/
 .idea/
+.vercel

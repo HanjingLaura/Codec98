@@ -1,0 +1,11 @@
+{
+  "name": "codec98",
+  "private": true,
+  "description": "Codec98 话术编解码器",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
