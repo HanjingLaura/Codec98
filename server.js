@@ -30,7 +30,14 @@ const store = require('./lib/store');
 
 const PORT = process.env.PORT || 3210;
 const PUBLIC = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.woff': 'font/woff', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.woff': 'font/woff', '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const BASE_PREFIX = '/Codec98';
+
+function stripBasePath(pathname) {
+  if (pathname === BASE_PREFIX || pathname === BASE_PREFIX + '/') return '/';
+  if (pathname.startsWith(BASE_PREFIX + '/')) return pathname.slice(BASE_PREFIX.length) || '/';
+  return pathname;
+}
 
 function json(res, code, obj) {
   const body = JSON.stringify(obj);
@@ -185,6 +192,11 @@ const routes = {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
+  if (url.pathname === BASE_PREFIX) {
+    res.writeHead(308, { location: BASE_PREFIX + '/' + url.search });
+    return res.end();
+  }
+  url.pathname = stripBasePath(url.pathname);
   // GET /api/bosses/:id/corpus
   const m = url.pathname.match(/^\/api\/bosses\/([^/]+)\/corpus$/);
   if (m && req.method === 'GET') {

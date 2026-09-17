@@ -102,6 +102,23 @@ node server.js
 
 启动日志会标明当前推理后端：`LLM在线（dashscope）` 或 `本地引擎（未配置API key）`。
 
+### 部署到 Vercel
+
+本仓库是零依赖 Node HTTP 服务，Vercel 会识别根目录的 `server.js` 并部署为函数。线上同时响应 `/` 与 `/Codec98/`（静态资源与 `/api/*`）。
+
+要把应用挂到已有个人站 `https://hanjing-laura.vercel.app/Codec98/`，在该 Next.js 项目的 `next.config` 里把子路径反代到本项目的生产域名：
+
+```js
+async rewrites() {
+  return [
+    { source: '/Codec98', destination: 'https://<codec98-production>.vercel.app/Codec98' },
+    { source: '/Codec98/:path*', destination: 'https://<codec98-production>.vercel.app/Codec98/:path*' },
+  ];
+}
+```
+
+百炼 Key 在 Vercel 项目环境变量中配置 `DASHSCOPE_API_KEY`（及可选的 `MODEL_NAME`）。Serverless 上用户写入会落到 `/tmp`，冷启动后不会永久保留。
+
 ### 配置百炼 API（推荐）
 
 复制模板并填入 API Key：

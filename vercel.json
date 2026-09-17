@@ -1,0 +1,15 @@
+{
+  "functions": {
+    "server.js": {
+      "includeFiles": "{data,public,lib}/**",
+      "maxDuration": 60
+    }
+  },
+  "redirects": [
+    {
+      "source": "/Codec98",
+      "destination": "/Codec98/",
+      "permanent": true
+    }
+  ]
+}
