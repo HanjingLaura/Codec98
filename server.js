@@ -67,14 +67,82 @@ function tooLong(fields) {
   return null;
 }
 
-async function translateOnce({ domain, text, context, direction, tone, bossId, history }) {
-  const boss = bossId ? store.getBoss(bossId) : null;
-  const bossEntries = boss ? store.getBossEntries(boss.id) : [];
+function clipStr(s, n) {
+  return typeof s === 'string' ? s.slice(0, n) : '';
+}
+
+function sanitizeBoss(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    id: clipStr(raw.id, 40),
+    name: clipStr(raw.name, 40),
+    type: clipStr(raw.type, 40),
+    title: clipStr(raw.title, 40),
+    avatar: clipStr(raw.avatar, 8),
+    catchphrases: Array.isArray(raw.catchphrases) ? raw.catchphrases.slice(0, 12).map(s => clipStr(String(s), 40)) : [],
+    seedExamples: Array.isArray(raw.seedExamples)
+      ? raw.seedExamples.slice(0, 8).map(s => ({ 原话: clipStr(s.原话, 200), 真实含义: clipStr(s.真实含义, 200) }))
+      : []
+  };
+}
+
+function sanitizeEntries(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(-40).map(e => ({
+    原话: clipStr(e.原话, LIMITS.原话),
+    AI翻译: clipStr(e.AI翻译, 500),
+    被纠正: !!e.被纠正,
+    纠正内容: clipStr(e.纠正内容 || '', 500)
+  }));
+}
+
+function sanitizeAdopted(list, domainId) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(e => !domainId || !e.domainId || e.domainId === domainId)
+    .slice(-20)
+    .map(e => ({
+      原话: clipStr(e.原话, LIMITS.原话),
+      场景: clipStr(e.场景 || '', LIMITS.场景),
+      潜台词: clipStr(e.潜台词, LIMITS.潜台词),
+      应对: clipStr(e.应对 || '', LIMITS.应对)
+    }));
+}
+
+function sanitizeHistory(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(-16).map(m => ({
+    role: m.role === 'me' ? 'me' : 'them',
+    text: clipStr(m.text, LIMITS.text)
+  }));
+}
+
+function resolvePersonalization(body, domain) {
+  const clientBoss = sanitizeBoss(body.boss);
+  const hasClient = !!(body.boss || body.bossEntries || body.adopted || body.history);
+  if (hasClient || clientBoss) {
+    return {
+      boss: clientBoss,
+      bossEntries: clientBoss ? sanitizeEntries(body.bossEntries) : [],
+      adopted: sanitizeAdopted(body.adopted, domain.id),
+      history: sanitizeHistory(body.history)
+    };
+  }
+  const boss = body.bossId ? store.getBoss(body.bossId) : null;
+  return {
+    boss,
+    bossEntries: boss ? store.getBossEntries(boss.id) : [],
+    adopted: store.getAdopted(domain.id),
+    history: []
+  };
+}
+
+async function translateOnce({ domain, text, context, direction, tone, boss, bossEntries, adopted, history }) {
   const domainCorpus = store.loadDomainCorpus(domain);
   const prompt = assemblePrompt({
     domain, direction, tone, text, context, boss, bossEntries,
     generalCorpus: domainCorpus,
-    adopted: store.getAdopted(domain.id),
+    adopted: adopted || [],
     history
   });
   const { result, source } = await decode(prompt, { domain, direction, tone, text, boss, domainCorpus });
@@ -86,6 +154,10 @@ const routes = {
     json(res, 200, { domains: store.loadDomains(), provider: llmProvider() });
   },
 
+  'GET /api/seeds': async (req, res) => {
+    json(res, 200, store.loadSeeds());
+  },
+
   'POST /api/translate': async (req, res) => {
     const b = await readBody(req);
     if (!b.text || !b.text.trim()) return json(res, 400, { error: '原话不能为空' });
@@ -93,21 +165,24 @@ const routes = {
     if (lenErr) return json(res, 400, { error: lenErr });
     const domain = store.getDomain(b.domainId);
     if (!domain) return json(res, 500, { error: '领域配置缺失' });
+    const personal = resolvePersonalization(b, domain);
     const base = {
       domain,
       text: b.text.trim(), context: (b.context || '').trim(),
       direction: b.direction === 'reverse' ? 'reverse' : 'forward',
-      tone: ['safe', 'neutral', 'brave'].includes(b.tone) ? b.tone : 'neutral'
+      tone: ['safe', 'neutral', 'brave'].includes(b.tone) ? b.tone : 'neutral',
+      adopted: personal.adopted,
+      history: personal.history
     };
-    // compare 模式：通用 vs 专属并排（demo第三幕）
-    if (b.compare && b.bossId) {
+    // compare 模式：通用 vs 专属并排
+    if (b.compare && personal.boss) {
       const [generic, custom] = await Promise.all([
-        translateOnce({ ...base, bossId: null }),
-        translateOnce({ ...base, bossId: b.bossId })
+        translateOnce({ ...base, boss: null, bossEntries: [] }),
+        translateOnce({ ...base, boss: personal.boss, bossEntries: personal.bossEntries })
       ]);
       return json(res, 200, { compare: true, generic, custom });
     }
-    const result = await translateOnce({ ...base, bossId: b.bossId || null });
+    const result = await translateOnce({ ...base, boss: personal.boss, bossEntries: personal.bossEntries });
     json(res, 200, result);
   },
 
@@ -223,11 +298,14 @@ const server = http.createServer(async (req, res) => {
       if (role === 'them') {
         // 对方的消息 → 结合会话历史解码
         const domain = store.getDomain(session.domainId);
+        const boss = session.bossId ? store.getBoss(session.bossId) : null;
         const decoded = await translateOnce({
           domain, text, context: '',
           direction: 'forward',
           tone: ['safe', 'neutral', 'brave'].includes(b.tone) ? b.tone : 'neutral',
-          bossId: session.bossId,
+          boss,
+          bossEntries: boss ? store.getBossEntries(boss.id) : [],
+          adopted: store.getAdopted(domain.id),
           history: session.messages
         });
         msg.decoded = decoded;

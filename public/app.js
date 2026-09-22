@@ -55,12 +55,38 @@ const sfxDing = () => beep([660, 880, 1320], 0.09);
 const sfxCard = () => beep([220, 330, 440, 660, 880], 0.06);
 const sfxClick = () => beep([440], 0.04);
 
+async function personalContext(includeBoss) {
+  const boss = includeBoss && state.currentBossId
+    ? (state.bosses.find(b => b.id === state.currentBossId) || await CodecDB.getBoss(state.currentBossId))
+    : null;
+  return {
+    boss: boss || null,
+    bossEntries: boss ? await CodecDB.getBossEntries(boss.id) : [],
+    adopted: await CodecDB.getAdopted(state.domain.id)
+  };
+}
+
+async function bumpDecodeCount() {
+  state.decodeCount++;
+  await CodecDB.setMeta('decodeCount', state.decodeCount);
+  $('taskbar-status').textContent = `已解码 ${state.decodeCount} 条语录`;
+}
+
 /* ================= 初始化 ================= */
 async function init() {
   const r = await api('/api/domains');
   state.domains = r.domains;
   state.provider = r.provider;
   $('taskbar-mode').textContent = r.provider ? `⚡ LLM在线（${r.provider}）` : '⚙ 本地引擎';
+  try {
+    const seeds = await api('/api/seeds');
+    await CodecDB.ensureSeeded(seeds);
+    state.decodeCount = await CodecDB.getMeta('decodeCount', 0);
+    $('taskbar-status').textContent = `已解码 ${state.decodeCount} 条语录`;
+  } catch (e) {
+    console.error(e);
+    alert('本机数据库初始化失败：' + e.message);
+  }
   renderDomainBar();
   await switchDomain(state.domains[0].id, true);
   bindEvents();
@@ -103,11 +129,10 @@ window.switchDomain = async function (id, silent) {
 
 /* ================= 数据加载 ================= */
 async function loadBosses(selectId) {
-  const r = await api(`/api/bosses?domainId=${state.domain.id}`);
-  state.bosses = r.bosses;
+  state.bosses = await CodecDB.listBosses(state.domain.id);
   const sel = $('boss-select');
   sel.innerHTML = `<option value="">通用模式（未指定${state.domain.targetNoun}）</option>` +
-    r.bosses.map(b => `<option value="${b.id}">${b.avatar} ${b.name}（${b.title}）研究进度 Lv.${b.level}</option>`).join('');
+    state.bosses.map(b => `<option value="${b.id}">${b.avatar} ${b.name}（${b.title}）研究进度 Lv.${b.level}</option>`).join('');
   sel.value = selectId || '';
   state.currentBossId = selectId || '';
   updateBossButtons();
@@ -142,6 +167,17 @@ function bindEvents() {
   $('btn-new-post').onclick = openPost;
   $('btn-submit-post').onclick = submitPost;
   $('forum-domain').onchange = () => loadForum();
+  $('start-btn').onclick = toggleStartMenu;
+  $('start-data').onclick = () => { hideStartMenu(); openDataWindow(); };
+  $('start-export').onclick = () => { hideStartMenu(); exportLocalData(); };
+  $('start-import').onclick = () => { hideStartMenu(); $('import-file').click(); };
+  $('import-file').onchange = importLocalData;
+  $('btn-data-export').onclick = exportLocalData;
+  $('btn-data-import').onclick = () => $('import-file').click();
+  $('btn-data-reset').onclick = resetLocalData;
+  document.addEventListener('click', e => {
+    if (!$('start-menu').contains(e.target) && e.target !== $('start-btn')) hideStartMenu();
+  });
 }
 
 function applyDirectionTexts() {
@@ -184,11 +220,12 @@ async function doDecode() {
   const compare = $('chk-compare').checked && state.currentBossId && state.mode === 'forward';
 
   showProgress();
+  const ctx = await personalContext(!!state.currentBossId);
   const body = {
     domainId: state.domain.id,
     text, context: $('input-context').value.trim(),
     direction: state.mode, tone: state.tone,
-    bossId: state.currentBossId || null, compare
+    compare, ...ctx
   };
   let data;
   try {
@@ -200,8 +237,7 @@ async function doDecode() {
   hideProgress();
   sfxDing();
 
-  state.decodeCount++;
-  $('taskbar-status').textContent = `已解码 ${state.decodeCount} 条语录`;
+  await bumpDecodeCount();
 
   if (data.compare) renderCompare(text, data);
   else renderReport(text, data);
@@ -342,9 +378,13 @@ window.copyDraft = function (btn) {
 window.sendFeedback = async function (accurate) {
   if (!state.lastResult?.bossId) return;
   try {
-    const r = await apiPost('/api/feedback', { ...state.lastResult, 准确: accurate });
+    const r = await CodecDB.addEntry({
+      ...state.lastResult,
+      被纠正: !accurate,
+      纠正内容: accurate ? null : ''
+    });
     sfxDing();
-    alert(accurate ? `✓ 已存入专属语料库（研究进度 Lv.${r.level}）` : '');
+    alert(accurate ? `✓ 已存入本机专属语料库（研究进度 Lv.${r.level}）` : '');
     loadBosses(state.currentBossId);
   } catch (e) { alert('反馈失败：' + e.message); }
 };
@@ -361,9 +401,9 @@ async function submitCorrection() {
   const content = $('correct-text').value.trim();
   if (!content) return alert('请填写实际含义');
   try {
-    const r = await apiPost('/api/feedback', { ...state.lastResult, 准确: false, 纠正内容: content });
+    const r = await CodecDB.addEntry({ ...state.lastResult, 被纠正: true, 纠正内容: content });
     closeCorrect(); sfxCard();
-    alert(`✓ 更正已提交数据库，标记为最高优先级参考\n研究进度提升至 Lv.${r.level}，下次解码会吸收这条纠正`);
+    alert(`✓ 更正已写入本机语料库，标记为最高优先级参考\n研究进度提升至 Lv.${r.level}，下次解码会吸收这条纠正`);
     loadBosses(state.currentBossId);
   } catch (e) { alert('提交纠正失败：' + e.message); }
 }
@@ -420,16 +460,16 @@ window.finishQuiz = async function () {
   const meta = d.types[type] || { avatar: '👤', title: type };
   let r;
   try {
-    r = await apiPost('/api/bosses', {
+    r = await CodecDB.addBoss({
       domainId: d.id,
       name, type, avatar: meta.avatar, title: meta.title, radar,
       catchphrases: $('quiz-phrases').value.split(/[,，]/).map(s => s.trim()).filter(Boolean)
     });
   } catch (e) { return alert('建立档案失败：' + e.message); }
   closeQuiz();
-  await loadBosses(r.boss.id);
+  await loadBosses(r.id);
   sfxCard();
-  showBossWindow(r.boss.id);
+  showBossWindow(r.id);
 };
 
 /* ================= 目标人物档案卡 ================= */
@@ -458,10 +498,10 @@ function radarSVG(radar) {
 async function showBossWindow(bossId) {
   const boss = state.bosses.find(b => b.id === bossId);
   if (!boss) return;
-  let corpus;
-  try { corpus = await api(`/api/bosses/${bossId}/corpus`); }
+  let entries;
+  try { entries = await CodecDB.getBossEntries(bossId); }
   catch (e) { return alert('档案加载失败：' + e.message); }
-  const corrected = corpus.entries.filter(e => e.被纠正);
+  const corrected = entries.filter(e => e.被纠正);
   $('boss-card-body').innerHTML = `
     <div class="boss-card">
       <div class="stamp">CONFIDENTIAL</div>
@@ -480,10 +520,10 @@ async function showBossWindow(bossId) {
           ${boss.catchphrases?.length ? `<br>🗣️ 口头禅：${boss.catchphrases.map(esc).join('、')}` : ''}
         </div>
       </div>
-      ${corpus.entries.length ? `
+      ${entries.length ? `
         <fieldset><legend>📚 研究记录（纠错优先展示）</legend>
         <div class="corpus-list">
-          ${[...corrected, ...corpus.entries.filter(e => !e.被纠正)].slice(0, 12).map(e => `
+          ${[...corrected, ...entries.filter(e => !e.被纠正)].slice(0, 12).map(e => `
             <div class="corpus-entry">
               <span class="orig-q">「${esc(e.原话)}」</span><br>
               ${e.被纠正
@@ -561,28 +601,27 @@ function chatAvatars() {
 }
 
 async function loadChatSessions() {
-  const q = `domainId=${state.domain.id}&bossId=${state.currentBossId || ''}`;
-  let r;
-  try { r = await api(`/api/chats?${q}`); }
+  let sessions;
+  try { sessions = await CodecDB.listSessions(state.domain.id, state.currentBossId || ''); }
   catch (e) {
     $('chat-log').innerHTML = `<div class="chat-empty">会话加载失败：${esc(e.message)}</div>`;
     return;
   }
-  state.chatSessions = r.sessions;
+  state.chatSessions = sessions;
   const sel = $('chat-select');
-  sel.innerHTML = r.sessions.length
-    ? r.sessions.map(s => `<option value="${s.id}">${esc(s.title)}（${s.count}条）</option>`).join('')
+  sel.innerHTML = sessions.length
+    ? sessions.map(s => `<option value="${s.id}">${esc(s.title)}（${s.count}条）</option>`).join('')
     : '<option value="">（还没有会话，点「＋ 新会话」开始）</option>';
-  if (!r.sessions.find(s => s.id === state.chatId)) state.chatId = r.sessions[0]?.id || '';
+  if (!sessions.find(s => s.id === state.chatId)) state.chatId = sessions[0]?.id || '';
   sel.value = state.chatId;
   renderChatLog();
 }
 
 async function createChatSession() {
-  let r;
-  try { r = await apiPost('/api/chats', { domainId: state.domain.id, bossId: state.currentBossId || null }); }
+  let session;
+  try { session = await CodecDB.createSession({ domainId: state.domain.id, bossId: state.currentBossId || null }); }
   catch (e) { return alert('新建会话失败：' + e.message); }
-  state.chatId = r.session.id;
+  state.chatId = session.id;
   sfxCard();
   await loadChatSessions();
   $('chat-input').focus();
@@ -620,15 +659,15 @@ async function renderChatLog() {
     log.innerHTML = '<div class="chat-empty">还没有消息。把对方发来的话贴进下面，解码器会结合整段对话帮你分析。</div>';
     return;
   }
-  let r;
-  try { r = await api(`/api/chats/${state.chatId}`); }
+  let session;
+  try { session = await CodecDB.getSession(state.chatId); }
   catch (e) {
     log.innerHTML = `<div class="chat-empty">消息加载失败：${esc(e.message)}</div>`;
     return;
   }
-  if (!r.session) return;
+  if (!session) return;
   const av = chatAvatars();
-  log.innerHTML = r.session.messages.length ? r.session.messages.map(m => chatMsgHTML(m, av)).join('')
+  log.innerHTML = session.messages.length ? session.messages.map(m => chatMsgHTML(m, av)).join('')
     : '<div class="chat-empty">会话已建立。把对方发来的话贴进下面开始解码。</div>';
   log.scrollTop = log.scrollHeight;
 }
@@ -648,15 +687,29 @@ async function sendChat(role) {
   if (role === 'them') $('chat-progress').style.display = '';
   $('btn-send-them').disabled = $('btn-send-me').disabled = true;
   try {
-    const r = await apiPost(`/api/chats/${state.chatId}/message`, { role, text, tone: state.tone });
+    const session = await CodecDB.getSession(state.chatId);
+    if (!session) throw new Error('会话不存在');
+    const msg = { role, text, time: new Date().toISOString() };
+    if (role === 'them') {
+      const ctx = await personalContext(!!session.bossId || !!state.currentBossId);
+      const decoded = await apiPost('/api/translate', {
+        domainId: state.domain.id,
+        text,
+        direction: 'forward',
+        tone: state.tone,
+        history: session.messages,
+        ...ctx
+      });
+      msg.decoded = decoded;
+    }
+    const updated = await CodecDB.appendMessage(state.chatId, msg);
     $('chat-input').value = '';
-    if (role === 'them') { sfxDing(); state.decodeCount++; $('taskbar-status').textContent = `已解码 ${state.decodeCount} 条语录`; }
+    if (role === 'them') { sfxDing(); await bumpDecodeCount(); }
     else sfxClick();
-    // 只追加这条新消息并更新会话下拉的标题/条数，不重拉整个会话列表+消息重渲染
-    appendChatMsg(r.message);
+    appendChatMsg(msg);
     const s = state.chatSessions.find(x => x.id === state.chatId);
-    if (s) {
-      s.title = r.session.title; s.count++;
+    if (s && updated) {
+      s.title = updated.title; s.count++;
       const opt = $('chat-select').querySelector(`option[value="${state.chatId}"]`);
       if (opt) opt.textContent = `${s.title}（${s.count}条）`;
     }
@@ -689,14 +742,14 @@ function initForumDomainSelect() {
 
 async function loadForum() {
   const domainId = $('forum-domain').value;
-  let r;
-  try { r = await api(`/api/forum${domainId ? '?domainId=' + domainId : ''}`); }
+  let posts;
+  try { posts = await CodecDB.listPosts(domainId); }
   catch (e) {
     $('forum-list').innerHTML = `<div class="chat-empty">帖子加载失败：${esc(e.message)}</div>`;
     return;
   }
   const domainMap = Object.fromEntries(state.domains.map(d => [d.id, d]));
-  $('forum-list').innerHTML = r.posts.length ? r.posts.map(p => {
+  $('forum-list').innerHTML = posts.length ? posts.map(p => {
     const d = domainMap[p.domainId];
     return `
     <div class="forum-post">
@@ -722,8 +775,8 @@ async function loadForum() {
 window.likeForumPost = async function (id, btn) {
   btn.disabled = true;
   try {
-    const r = await apiPost(`/api/forum/${id}/like`);
-    if (r.post) btn.textContent = `有共鸣（${r.post.likes}）`;
+    const post = await CodecDB.likePost(id);
+    if (post) btn.textContent = `有共鸣（${post.likes}）`;
     sfxClick();
   } catch (e) {
     btn.disabled = false;
@@ -733,10 +786,10 @@ window.likeForumPost = async function (id, btn) {
 
 window.adoptForumPost = async function (id) {
   try {
-    const r = await apiPost(`/api/forum/${id}/adopt`);
-    if (r.post) {
+    const post = await CodecDB.adoptPost(id);
+    if (post) {
       sfxCard();
-      alert('✓ 已收入本地语料库\n之后该领域的每次解码都会参考这条真实案例');
+      alert('✓ 已收入本机语料库\n之后该领域的每次解码都会参考这条真实案例');
       loadForum();
     }
   } catch (e) {
@@ -746,18 +799,19 @@ window.adoptForumPost = async function (id) {
 
 window.unadoptForumPost = async function (id) {
   try {
-    const r = await apiPost(`/api/forum/${id}/unadopt`);
-    if (r.post) { sfxClick(); loadForum(); }
+    const post = await CodecDB.unadoptPost(id);
+    if (post) { sfxClick(); loadForum(); }
   } catch (e) {
     alert('取消失败：' + e.message);
   }
 };
 
-window.openPost = function () {
+window.openPost = async function () {
   const sel = $('post-domain');
   sel.innerHTML = state.domains.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
   sel.value = $('forum-domain').value || state.domain.id;
   for (const id of ['post-author', 'post-original', 'post-scene', 'post-subtext', 'post-advice']) $(id).value = '';
+  $('post-author').value = await CodecDB.getMeta('forumAuthor', '');
   $('overlay').style.display = ''; $('win-post').style.display = '';
   $('post-original').focus();
   sfxClick();
@@ -771,9 +825,11 @@ async function submitPost() {
   if (!原话 || !潜台词) return alert('「原话」和「言外之意」是必填的');
   let r;
   try {
-    r = await apiPost('/api/forum', {
+    const author = $('post-author').value.trim();
+    if (author) await CodecDB.setMeta('forumAuthor', author);
+    r = await CodecDB.addPost({
       domainId: $('post-domain').value,
-      author: $('post-author').value.trim(),
+      author,
       原话, 潜台词,
       场景: $('post-scene').value.trim(),
       应对: $('post-advice').value.trim()
@@ -782,6 +838,88 @@ async function submitPost() {
   closePost(); sfxCard();
   $('forum-domain').value = $('post-domain').value;
   loadForum();
+}
+
+/* ================= 本机数据：开始菜单 / 备份 / 恢复 ================= */
+function toggleStartMenu() {
+  const menu = $('start-menu');
+  const hidden = !menu.style.display || menu.style.display === 'none';
+  menu.style.display = hidden ? 'flex' : 'none';
+  sfxClick();
+}
+function hideStartMenu() { $('start-menu').style.display = 'none'; }
+
+async function refreshDataStats() {
+  const s = await CodecDB.stats();
+  $('data-stats').innerHTML = `
+    <div>人物档案：<b>${s.bosses}</b></div>
+    <div>纠错语料：<b>${s.corpus}</b></div>
+    <div>会话：<b>${s.chats}</b>（${s.messages} 条消息）</div>
+    <div>论坛帖：<b>${s.forum}</b> · 已收入案例：<b>${s.adopted}</b></div>
+    <div>累计解码：<b>${s.decodeCount}</b> 条</div>`;
+}
+
+async function openDataWindow() {
+  await refreshDataStats();
+  $('overlay').style.display = '';
+  $('win-data').style.display = '';
+  sfxCard();
+}
+window.closeDataWindow = function () {
+  $('overlay').style.display = 'none';
+  $('win-data').style.display = 'none';
+};
+
+async function exportLocalData() {
+  const bundle = await CodecDB.exportAll();
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `codec98-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  sfxDing();
+}
+
+async function importLocalData(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  if (!confirm('导入会覆盖这台浏览器里现有的 Codec98 数据，确定吗？')) return;
+  try {
+    const bundle = JSON.parse(await file.text());
+    await CodecDB.importAll(bundle);
+    state.decodeCount = await CodecDB.getMeta('decodeCount', 0);
+    $('taskbar-status').textContent = `已解码 ${state.decodeCount} 条语录`;
+    await loadBosses(state.currentBossId);
+    if (state.mode === 'chat') await loadChatSessions();
+    if (state.mode === 'forum') await loadForum();
+    if ($('win-data').style.display !== 'none') await refreshDataStats();
+    sfxCard();
+    alert('✓ 备份已导入本机数据库');
+  } catch (e) {
+    alert('导入失败：' + e.message);
+  }
+}
+
+async function resetLocalData() {
+  if (!confirm('将清空本机档案、会话和自建帖子，并重新载入演示种子。此操作不可撤销。')) return;
+  try {
+    const seeds = await api('/api/seeds');
+    await CodecDB.resetToSeeds(seeds);
+    state.decodeCount = 0;
+    state.currentBossId = '';
+    state.chatId = '';
+    $('taskbar-status').textContent = '已解码 0 条语录';
+    await loadBosses();
+    if (state.mode === 'chat') await loadChatSessions();
+    if (state.mode === 'forum') await loadForum();
+    await refreshDataStats();
+    sfxCard();
+    alert('✓ 已恢复为演示种子');
+  } catch (e) {
+    alert('重置失败：' + e.message);
+  }
 }
 
 /* ================= 任务栏时钟 ================= */

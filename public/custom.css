@@ -266,6 +266,47 @@ textarea, input[type=text] { font-family: inherit; font-size: 13px; }
   box-shadow: 6px 6px 0 rgba(0,0,0,.45);
 }
 
+.data-window {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, 94vw);
+  z-index: 30; margin: 0;
+  box-shadow: 6px 6px 0 rgba(0,0,0,.45);
+}
+.data-stats {
+  border: 1px inset #808080;
+  background: #fff;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+#start-menu {
+  position: fixed; left: 2px; bottom: 32px;
+  z-index: 50;
+  display: flex;
+  min-width: 220px;
+  background: #d4d0c8;
+  border: 2px outset #fff;
+  box-shadow: 4px 4px 0 rgba(0,0,0,.35);
+}
+.start-menu-side {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  background: linear-gradient(#000080, #1084d0);
+  color: #fff;
+  font-weight: bold;
+  padding: 10px 6px;
+  letter-spacing: 2px;
+}
+.start-menu-items { display: flex; flex-direction: column; padding: 4px; flex: 1; }
+.start-menu-items button {
+  text-align: left;
+  padding: 8px 12px;
+  min-width: 160px;
+}
+
 /* 任务栏 */
 #taskbar {
   position: fixed; bottom: 0; left: 0; right: 0;

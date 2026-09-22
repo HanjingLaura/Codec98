@@ -25,7 +25,7 @@
       <div class="boot-features">
         <div>🔍 DECODE —— 输入对方原话，输出潜台词 + 回复草稿</div>
         <div>🔐 ENCODE —— 输入你的真心话，输出得体表达</div>
-        <div>📈 UPGRADE —— 建档纠错，解码器随使用升级</div>
+        <div>📈 UPGRADE —— 建档纠错，数据存在本机浏览器</div>
       </div>
       <button class="default-btn boot-enter-btn" id="btn-enter">▶ 开始使用</button>
       <div class="boot-hint">按 Enter 键也可进入</div>
@@ -223,7 +223,34 @@
 
   <div id="overlay" style="display:none"></div>
 
+  <!-- ============ 本机数据窗口 ============ -->
+  <div class="window data-window" id="win-data" style="display:none">
+    <div class="title-bar">
+      <div class="title-bar-text">💾 我的数据 — LOCAL_STORE.DAT</div>
+      <div class="title-bar-controls"><button aria-label="Close" onclick="closeDataWindow()"></button></div>
+    </div>
+    <div class="window-body">
+      <p style="margin:4px 0 8px">档案、纠错语料、会话和论坛都存在<strong>这台电脑的浏览器</strong>里，换设备或清站点数据前请先导出备份。解码仍走服务器，密钥不会进浏览器。</p>
+      <div id="data-stats" class="data-stats"></div>
+      <div class="field-row" style="justify-content:flex-end; gap:6px; margin-top:10px">
+        <button id="btn-data-reset">清空并恢复种子</button>
+        <button id="btn-data-import">📥 导入备份</button>
+        <button class="default-btn" id="btn-data-export">📤 导出备份</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+
   <!-- ============ 任务栏 ============ -->
+  <div id="start-menu" style="display:none">
+    <div class="start-menu-side">Codec98</div>
+    <div class="start-menu-items">
+      <button id="start-data">💾 我的数据</button>
+      <button id="start-export">📤 导出备份</button>
+      <button id="start-import">📥 导入备份</button>
+    </div>
+  </div>
   <div id="taskbar">
     <button id="start-btn">🖥️ 开始</button>
     <div class="taskbar-item" id="taskbar-app">Codec98</div>
@@ -234,6 +261,7 @@
   </div>
 
 </div>
+<script src="db.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
