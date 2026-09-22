@@ -155,22 +155,17 @@ server.js                  零依赖 HTTP 服务与 API 路由（node:http）
 lib/env.js                 .env 加载器（不覆盖已存在的环境变量）
 lib/prompt.js              Prompt 组装流水线
 lib/llm.js                 LLM 调用层：百炼（DashScope）/ 本地规则引擎
-lib/store.js               JSON 持久化（原子写入）与领域配置加载
+lib/store.js               领域配置与演示种子加载
 data/domains.json          领域定义（文案/仪表/类型/问卷/雷达维度/系统提示词）【只读】
 data/general_corpus.json   职场语料（few-shot）
 data/corpus_client.json    甲方语料（few-shot）
 data/corpus_internet.json  互联网语料（few-shot）
 data/corpus_employee.json  员工语料（few-shot）
 data/corpus_romance.json   恋爱语料（few-shot）
-data/bosses.json           人物档案种子
+data/bosses.json           人物档案种子（首次打开写入浏览器）
 data/corpus.json           纠错记录种子
 data/forum_seed.json       BBS 种子帖
-data/user/                 用户真实积累：
-  ├─ bosses.json             人物档案
-  ├─ corpus.json             人物专属语料与纠错记录
-  ├─ chats.json              连续对话会话
-  ├─ forum.json              论坛帖子
-  └─ adopted.json            从论坛收入语料库的案例
+public/db.js               浏览器 IndexedDB（档案 / 语料 / 会话 / 论坛 / 备份）
 public/                    前端（98.css + 原生 JS，无构建步骤）
 docs/screenshots/          界面截图
 ```
