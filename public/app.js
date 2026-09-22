@@ -13,6 +13,7 @@ const state = {
   lastResult: null,   // {原话, AI翻译, bossId, direction}
   chatId: '',         // 当前会话 id
   chatSessions: [],
+  ready: false,       // IndexedDB + 种子装完才能进桌面
 };
 const TONES = ['safe', 'neutral', 'brave'];
 const TONE_NAMES = { safe: '稳妥', neutral: '不卑不亢', brave: '勇 🔥' };
@@ -55,9 +56,10 @@ const sfxDing = () => beep([660, 880, 1320], 0.09);
 const sfxCard = () => beep([220, 330, 440, 660, 880], 0.06);
 const sfxClick = () => beep([440], 0.04);
 
-async function personalContext(includeBoss) {
-  const boss = includeBoss && state.currentBossId
-    ? (state.bosses.find(b => b.id === state.currentBossId) || await CodecDB.getBoss(state.currentBossId))
+async function personalContext(bossId) {
+  const id = bossId === undefined ? state.currentBossId : bossId;
+  const boss = id
+    ? (state.bosses.find(b => b.id === id) || await CodecDB.getBoss(id))
     : null;
   return {
     boss: boss || null,
@@ -79,18 +81,27 @@ async function init() {
   state.provider = r.provider;
   $('taskbar-mode').textContent = r.provider ? `⚡ LLM在线（${r.provider}）` : '⚙ 本地引擎';
   try {
+    if (!window.CodecDB) throw new Error('本机数据库脚本未加载');
     const seeds = await api('/api/seeds');
     await CodecDB.ensureSeeded(seeds);
     state.decodeCount = await CodecDB.getMeta('decodeCount', 0);
     $('taskbar-status').textContent = `已解码 ${state.decodeCount} 条语录`;
   } catch (e) {
     console.error(e);
+    const hint = $('boot-hint');
+    if (hint) hint.textContent = '本机数据库装载失败：' + e.message;
     alert('本机数据库初始化失败：' + e.message);
+    return;
   }
   renderDomainBar();
-  await switchDomain(state.domains[0].id, true);
+  const last = await CodecDB.getMeta('lastDomain', state.domains[0].id);
+  const startId = state.domains.some(d => d.id === last) ? last : state.domains[0].id;
+  await switchDomain(startId, true);
   bindEvents();
   tickClock(); setInterval(tickClock, 1000);
+  state.ready = true;
+  $('btn-enter').disabled = false;
+  $('boot-hint').textContent = '按 Enter 键也可进入';
 }
 
 /* ================= 领域切换（桌面快捷方式风格） ================= */
@@ -124,6 +135,7 @@ window.switchDomain = async function (id, silent) {
   await loadBosses();
   if (state.mode === 'chat') { state.chatId = ''; loadChatSessions(); }
   if (state.mode === 'forum') initForumDomainSelect();
+  CodecDB.setMeta('lastDomain', id).catch(() => {});
   if (!silent) sfxCard();
 };
 
@@ -131,8 +143,8 @@ window.switchDomain = async function (id, silent) {
 async function loadBosses(selectId) {
   state.bosses = await CodecDB.listBosses(state.domain.id);
   const sel = $('boss-select');
-  sel.innerHTML = `<option value="">通用模式（未指定${state.domain.targetNoun}）</option>` +
-    state.bosses.map(b => `<option value="${b.id}">${b.avatar} ${b.name}（${b.title}）研究进度 Lv.${b.level}</option>`).join('');
+  sel.innerHTML = `<option value="">通用模式（未指定${esc(state.domain.targetNoun)}）</option>` +
+    state.bosses.map(b => `<option value="${esc(b.id)}">${esc(b.avatar)} ${esc(b.name)}（${esc(b.title)}）研究进度 Lv.${b.level}</option>`).join('');
   sel.value = selectId || '';
   state.currentBossId = selectId || '';
   updateBossButtons();
@@ -220,7 +232,7 @@ async function doDecode() {
   const compare = $('chk-compare').checked && state.currentBossId && state.mode === 'forward';
 
   showProgress();
-  const ctx = await personalContext(!!state.currentBossId);
+  const ctx = await personalContext(state.currentBossId);
   const body = {
     domainId: state.domain.id,
     text, context: $('input-context').value.trim(),
@@ -260,7 +272,7 @@ function progressFinish() {
 function hideProgress() { clearInterval(state._pt); $('progress-area').style.display = 'none'; }
 
 /* ================= 渲染：解码报告 ================= */
-function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 function meterHTML(result) {
   const [mA, mB] = state.domain.meters;
@@ -588,6 +600,10 @@ function runBootSequence() {
 }
 
 function enterDesktop() {
+  if (!state.ready) {
+    $('boot-hint').textContent = '还在装载本机数据库，请稍候…';
+    return;
+  }
   sfxDing(); // 首次用户手势，顺带解锁 WebAudio
   const boot = $('boot-screen');
   boot.classList.add('fade-out');
@@ -691,7 +707,7 @@ async function sendChat(role) {
     if (!session) throw new Error('会话不存在');
     const msg = { role, text, time: new Date().toISOString() };
     if (role === 'them') {
-      const ctx = await personalContext(!!session.bossId || !!state.currentBossId);
+      const ctx = await personalContext(session.bossId);
       const decoded = await apiPost('/api/translate', {
         domainId: state.domain.id,
         text,
@@ -763,10 +779,10 @@ async function loadForum() {
       <div class="forum-subtext"><b>言外之意：</b>${esc(p.潜台词)}</div>
       ${p.应对 ? `<div class="forum-advice"><b>应对经验：</b>${esc(p.应对)}</div>` : ''}
       <div class="forum-actions">
-        <button onclick="likeForumPost('${p.id}', this)">有共鸣（${p.likes || 0}）</button>
+        <button onclick="likeForumPost('${esc(p.id)}', this)">有共鸣（${p.likes || 0}）</button>
         ${p.adopted
-          ? `<button onclick="unadoptForumPost('${p.id}')" title="从我的语料库移除，之后解码不再参考">✓ 已收入语料库（点击取消）</button>`
-          : `<button onclick="adoptForumPost('${p.id}')">收入我的语料库</button>`}
+          ? `<button onclick="unadoptForumPost('${esc(p.id)}')" title="从我的语料库移除，之后解码不再参考">✓ 已收入语料库（点击取消）</button>`
+          : `<button onclick="adoptForumPost('${esc(p.id)}')">收入我的语料库</button>`}
       </div>
     </div>`;
   }).join('') : '<div class="chat-empty">这个板块还没有帖子，来发第一帖吧。</div>';
@@ -885,6 +901,7 @@ async function importLocalData(ev) {
   const file = ev.target.files && ev.target.files[0];
   ev.target.value = '';
   if (!file) return;
+  if (file.size > CodecDB.IMPORT_MAX_BYTES) return alert('备份文件超过 2MB，请检查是否选错文件');
   if (!confirm('导入会覆盖这台浏览器里现有的 Codec98 数据，确定吗？')) return;
   try {
     const bundle = JSON.parse(await file.text());
