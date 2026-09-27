@@ -73,6 +73,7 @@ select { max-width: 100%; }
 /* 模式标签：宽屏用全称，窄屏用短称 */
 .tab-short { display: none; }
 menu[role=tablist] > li { flex: 1; min-width: 0; text-align: center; }
+menu[role=tablist] > li[aria-selected=true] { margin-left: 0; }
 menu[role=tablist] a { display: block; text-align: center; }
 
 .target-row {
@@ -441,11 +442,31 @@ menu[role=tablist] a { display: block; text-align: center; }
 
 /* ---------- 移动端适配 ---------- */
 @media (max-width: 720px) {
-  html, body { overflow-x: hidden; }
+  html { scrollbar-gutter: auto; }
+  html, body { overflow-x: hidden; min-height: 100dvh; }
   #desktop {
-    padding: 8px 8px calc(48px + env(safe-area-inset-bottom));
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 8px calc(42px + env(safe-area-inset-bottom));
     max-width: 100%;
+    box-sizing: border-box;
   }
+  #workspace {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  /* 窗口铺到任务栏上方，短内容不再在中间空出一大块 */
+  #win-decoder {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+  #win-decoder > .title-bar { flex: none; }
+  #win-decoder > .window-body { flex: 1 0 auto; }
+  #workspace:has(#result-area:not(:empty)) #win-decoder { flex: 0 0 auto; }
   .window, .main-window { max-width: 100%; }
   .main-window > .window-body,
   .main-window .window[role=tabpanel] > .window-body { margin: 6px; }
