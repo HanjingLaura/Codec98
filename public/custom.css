@@ -590,40 +590,60 @@ menu[role=tablist] a { display: block; text-align: center; }
     overflow-wrap: anywhere;
   }
 
-  button { min-height: 34px; }
-  .title-bar-controls button { min-height: 0; height: 14px; padding: 0; color: transparent; text-shadow: none; }
-  .chat-use-btn { min-height: 28px; }
-  input[type=text], textarea, select { font-size: 16px; }
-  /* 98.css 把 select 锁在 21px、按钮用像素字体的透明字，手机上中文会被裁成别的字 */
-  select, option,
-  .window-body button,
-  #taskbar button,
+  .title-bar-controls button { min-height: 0; height: 14px; padding: 0; color: transparent; text-shadow: none; font-size: 0; }
+  .chat-use-btn { min-height: 28px; height: auto; line-height: 1.2; padding: 2px 8px; }
+  /* 单行按钮、输入框、下拉框同一高度、同一字体，避免下拉框单独被撑高 */
+  .window-body button:not(.chat-use-btn),
+  .window-body input[type=text],
+  .window-body select,
   #start-menu button {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: auto;
+    font-size: 16px;
+    color: #222;
+    text-shadow: none;
+    box-sizing: border-box;
+    height: 40px;
+    min-height: 40px;
+    line-height: 40px;
+    padding: 0 12px;
+  }
+  .window-body textarea {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: auto;
+    font-size: 16px;
+    color: #222;
+    line-height: 1.45;
+    padding: 8px 10px;
+    min-height: 88px;
+  }
+  .window-body select {
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 0 32px 0 10px;
+    background-color: #fff;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath fill='%23222' d='M1 3h10L6 9z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 12px;
+  }
+  option {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    height: auto;
+    min-height: 0;
+  }
+  #taskbar button {
     font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
     -webkit-font-smoothing: auto;
     color: #222;
     text-shadow: none;
-    height: auto;
-    line-height: 1.4;
-  }
-  select {
-    -webkit-appearance: none;
-    appearance: none;
-    height: 44px;
-    min-height: 44px;
-    line-height: 44px;
-    padding: 0 36px 0 10px;
-    background-color: #fff;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath fill='%23222' d='M3 5h10L8 12z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-    background-size: 14px 14px;
-  }
-  option {
-    line-height: 1.5;
+    height: 28px;
     min-height: 0;
-    height: auto;
-    padding: 8px;
+    line-height: 28px;
+    padding: 0 10px;
+    font-size: 14px;
   }
 
   .boss-window, .quiz-window, .correct-window, .post-window, .data-window {
