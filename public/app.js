@@ -171,6 +171,9 @@ async function loadBosses(selectId) {
 }
 
 function bindEvents() {
+  document.querySelectorAll('menu[role=tablist] a').forEach(a => {
+    a.addEventListener('click', e => e.preventDefault());
+  });
   $('tab-forward').onclick = () => setMode('forward');
   $('tab-reverse').onclick = () => setMode('reverse');
   $('tab-chat').onclick = () => setMode('chat');

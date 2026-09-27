@@ -24,6 +24,8 @@ html, body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
+/* 对话区更高，滚动条出现时不要把居中的窗口挤偏 */
+html { scrollbar-gutter: stable; }
 
 #desktop {
   max-width: 1120px;
