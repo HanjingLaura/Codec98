@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#008080">
 <title>Codec98 话术编解码器</title>
@@ -38,7 +38,8 @@
   <!-- ============ 桌面快捷方式：领域切换 ============ -->
   <div id="domain-bar"></div>
 
-  <!-- ============ 主窗口：解码器 ============ -->
+  <!-- ============ 主窗口 + 结果（宽屏并排） ============ -->
+  <div id="workspace">
   <div class="window main-window" id="win-decoder">
     <div class="title-bar">
       <div class="title-bar-text" id="app-titlebar">🖥️ Codec98 话术编解码器</div>
@@ -52,25 +53,27 @@
 
       <!-- 菜单栏风格的模式切换 -->
       <menu role="tablist">
-        <li role="tab" aria-selected="true" id="tab-forward"><a href="#" id="tab-forward-text">解码模式：话术 → 人话</a></li>
-        <li role="tab" id="tab-reverse"><a href="#" id="tab-reverse-text">加密模式：人话 → 话术</a></li>
-        <li role="tab" id="tab-chat"><a href="#">连续对话 — CHAT_98</a></li>
-        <li role="tab" id="tab-forum"><a href="#">弦外之音BBS</a></li>
+        <li role="tab" aria-selected="true" id="tab-forward"><a href="#"><span class="tab-full" id="tab-forward-text">解码模式：话术 → 人话</span><span class="tab-short">解码</span></a></li>
+        <li role="tab" id="tab-reverse"><a href="#"><span class="tab-full" id="tab-reverse-text">加密模式：人话 → 话术</span><span class="tab-short">加密</span></a></li>
+        <li role="tab" id="tab-chat"><a href="#"><span class="tab-full">连续对话 — CHAT_98</span><span class="tab-short">对话</span></a></li>
+        <li role="tab" id="tab-forum"><a href="#"><span class="tab-full">弦外之音BBS</span><span class="tab-short">论坛</span></a></li>
       </menu>
 
       <div class="window" role="tabpanel" style="margin:0">
         <div class="window-body">
 
-          <div class="field-row" style="justify-content:space-between; margin-bottom:8px" id="row-target">
-            <div class="field-row">
+          <div class="target-row" id="row-target">
+            <div class="target-main">
               <label id="label-target">目标对象：</label>
-              <select id="boss-select" style="min-width:160px">
+              <select id="boss-select">
                 <option value="">通用模式</option>
               </select>
-              <button id="btn-new-boss">＋ 建立新档案</button>
-              <button id="btn-view-boss" style="display:none">📁 查看档案</button>
+              <div class="target-actions">
+                <button id="btn-new-boss">＋ 建立新档案</button>
+                <button id="btn-view-boss" style="display:none">📁 查看档案</button>
+              </div>
             </div>
-            <label class="field-row" style="gap:4px" id="row-compare">
+            <label class="compare-toggle" id="row-compare">
               <input type="checkbox" id="chk-compare">
               <span title="同时展示通用翻译与专属翻译">并排对比模式</span>
             </label>
@@ -98,7 +101,7 @@
               <input id="input-context" type="text" placeholder="什么场合说的？之前发生了什么？">
             </div>
 
-            <div class="field-row" style="justify-content:flex-end">
+            <div class="decode-actions">
               <button id="btn-decode" class="default-btn">▶ 开始解码</button>
             </div>
 
@@ -119,9 +122,9 @@
             <div class="field-row-stacked" style="margin:8px 0 6px">
               <textarea id="chat-input" rows="2" placeholder="粘贴对方的消息，或输入你准备发出的话…"></textarea>
             </div>
-            <div class="field-row" style="justify-content:space-between">
+            <div class="chat-compose-actions">
               <span class="chat-hint">「对方说的」会自动解码；「我说的」只记录，让后续解码知道来龙去脉</span>
-              <span class="field-row" style="gap:6px">
+              <span class="chat-compose-buttons">
                 <button id="btn-send-them">对方说的</button>
                 <button id="btn-send-me" class="default-btn">我说的</button>
               </span>
@@ -135,11 +138,9 @@
           <!-- 面板三：弦外之音BBS -->
           <div id="panel-forum" style="display:none">
             <p class="forum-shared-note">公共板块：发出去的帖子，别人打开也能看到。收入语料库只影响你自己的解码。</p>
-            <div class="field-row" style="justify-content:space-between; margin-bottom:8px">
-              <span class="field-row" style="gap:6px">
-                <label>板块：</label>
-                <select id="forum-domain"></select>
-              </span>
+            <div class="forum-toolbar">
+              <label for="forum-domain">板块</label>
+              <select id="forum-domain"></select>
               <button id="btn-new-post" class="default-btn">我也遇到过 → 发帖</button>
             </div>
             <div id="forum-list"></div>
@@ -152,6 +153,7 @@
 
   <!-- ============ 结果区（动态插入报告窗口） ============ -->
   <div id="result-area"></div>
+  </div>
 
   <!-- ============ 目标人物档案卡窗口 ============ -->
   <div class="window boss-window" id="win-boss" style="display:none">
@@ -195,9 +197,9 @@
     </div>
     <div class="window-body">
       <p style="margin:4px 0 8px">分享一句你在生活中真实遇到的「言外之意」，帮后来人少踩坑：</p>
-      <div class="field-row" style="margin-bottom:6px">
-        <label>昵称：</label><input type="text" id="post-author" placeholder="匿名网友" style="flex:1">
-        <label>板块：</label><select id="post-domain"></select>
+      <div class="post-meta">
+        <label for="post-author">昵称</label><input type="text" id="post-author" placeholder="匿名网友">
+        <label for="post-domain">板块</label><select id="post-domain"></select>
       </div>
       <div class="field-row-stacked" style="margin-bottom:6px">
         <label>对方的原话（必填）：</label>
@@ -233,7 +235,7 @@
     <div class="window-body">
       <p style="margin:4px 0 8px">档案、纠错、会话和收入的案例存在<strong>这台浏览器</strong>里。论坛是大家共用的，不在这份备份里。解码仍走服务器，密钥不会进浏览器。</p>
       <div id="data-stats" class="data-stats"></div>
-      <div class="field-row" style="justify-content:flex-end; gap:6px; margin-top:10px">
+      <div class="data-actions">
         <button id="btn-data-reset">清空本机数据</button>
         <button id="btn-data-import">📥 导入备份</button>
         <button class="default-btn" id="btn-data-export">📤 导出备份</button>
