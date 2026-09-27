@@ -606,9 +606,24 @@ menu[role=tablist] a { display: block; text-align: center; }
     height: auto;
     line-height: 1.4;
   }
-  select, option {
-    min-height: 36px;
-    padding: 6px 28px 6px 8px;
+  select {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 44px;
+    min-height: 44px;
+    line-height: 44px;
+    padding: 0 36px 0 10px;
+    background-color: #fff;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath fill='%23222' d='M3 5h10L8 12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 14px 14px;
+  }
+  option {
+    line-height: 1.5;
+    min-height: 0;
+    height: auto;
+    padding: 8px;
   }
 
   .boss-window, .quiz-window, .correct-window, .post-window, .data-window {
