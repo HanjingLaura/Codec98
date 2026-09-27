@@ -27,6 +27,7 @@ const zlib = require('zlib');
 const { assemblePrompt } = require('./lib/prompt');
 const { decode, llmProvider } = require('./lib/llm');
 const store = require('./lib/store');
+const board = require('./lib/board');
 
 const PORT = process.env.PORT || 3210;
 const PUBLIC = path.join(__dirname, 'public');
@@ -247,7 +248,8 @@ const routes = {
   },
 
   'GET /api/forum': async (req, res, url) => {
-    json(res, 200, { posts: store.listPosts(url.searchParams.get('domainId')) });
+    const posts = await board.list(url.searchParams.get('domainId') || '');
+    json(res, 200, { posts, shared: true });
   },
 
   'POST /api/forum': async (req, res) => {
@@ -255,7 +257,7 @@ const routes = {
     if (!b.原话 || !b.潜台词) return json(res, 400, { error: '原话和潜台词必填' });
     const lenErr = tooLong({ 原话: b.原话, 潜台词: b.潜台词, 场景: b.场景 || '', 应对: b.应对 || '', author: b.author || '' });
     if (lenErr) return json(res, 400, { error: lenErr });
-    const post = store.addPost({
+    const post = await board.add({
       domainId: b.domainId || 'workplace',
       author: (b.author || '').trim() || '匿名网友',
       原话: b.原话.trim(), 场景: (b.场景 || '').trim(),
@@ -315,12 +317,7 @@ const server = http.createServer(async (req, res) => {
     }
     const mLike = url.pathname.match(/^\/api\/forum\/([^/]+)\/like$/);
     if (mLike && req.method === 'POST') {
-      const p = store.likePost(mLike[1]);
-      return p ? json(res, 200, { post: p }) : json(res, 404, { error: '帖子不存在' });
-    }
-    const mAdopt = url.pathname.match(/^\/api\/forum\/([^/]+)\/(adopt|unadopt)$/);
-    if (mAdopt && req.method === 'POST') {
-      const p = mAdopt[2] === 'adopt' ? store.adoptPost(mAdopt[1]) : store.unadoptPost(mAdopt[1]);
+      const p = await board.like(decodeURIComponent(mLike[1]));
       return p ? json(res, 200, { post: p }) : json(res, 404, { error: '帖子不存在' });
     }
   } catch (e) {

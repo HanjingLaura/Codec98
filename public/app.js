@@ -11,9 +11,10 @@ const state = {
   tone: 'neutral',
   decodeCount: 0,
   lastResult: null,   // {原话, AI翻译, bossId, direction}
-  chatId: '',         // 当前会话 id
+  chatId: '',
   chatSessions: [],
-  ready: false,       // IndexedDB + 种子装完才能进桌面
+  forumPosts: [],
+  ready: false,
 };
 const TONES = ['safe', 'neutral', 'brave'];
 const TONE_NAMES = { safe: '稳妥', neutral: '不卑不亢', brave: '勇 🔥' };
@@ -82,8 +83,8 @@ async function init() {
   $('taskbar-mode').textContent = r.provider ? `⚡ LLM在线（${r.provider}）` : '⚙ 本地引擎';
   try {
     if (!window.CodecDB) throw new Error('本机数据库脚本未加载');
-    const seeds = await api('/api/seeds');
-    await CodecDB.ensureSeeded(seeds);
+    await CodecDB.dropBundledSamples();
+    await publishLocalForumPosts();
     state.decodeCount = await CodecDB.getMeta('decodeCount', 0);
     $('taskbar-status').textContent = `已解码 ${state.decodeCount} 条语录`;
   } catch (e) {
@@ -102,6 +103,25 @@ async function init() {
   state.ready = true;
   $('btn-enter').disabled = false;
   $('boot-hint').textContent = '按 Enter 键也可进入';
+}
+
+async function publishLocalForumPosts() {
+  const mine = await CodecDB.myForumPosts();
+  for (const p of mine) {
+    try {
+      await apiPost('/api/forum', {
+        domainId: p.domainId,
+        author: p.author,
+        原话: p.原话,
+        潜台词: p.潜台词,
+        场景: p.场景 || '',
+        应对: p.应对 || ''
+      });
+      await CodecDB.deleteForumPost(p.id);
+    } catch (e) {
+      console.error(e);
+    }
+  }
 }
 
 /* ================= 领域切换（桌面快捷方式风格） ================= */
@@ -758,15 +778,21 @@ function initForumDomainSelect() {
 
 async function loadForum() {
   const domainId = $('forum-domain').value;
-  let posts;
-  try { posts = await CodecDB.listPosts(domainId); }
-  catch (e) {
+  let posts, liked;
+  try {
+    const r = await api(`/api/forum${domainId ? '?domainId=' + encodeURIComponent(domainId) : ''}`);
+    posts = r.posts || [];
+    liked = new Set(await CodecDB.likedPosts());
+  } catch (e) {
     $('forum-list').innerHTML = `<div class="chat-empty">帖子加载失败：${esc(e.message)}</div>`;
     return;
   }
+  const adopted = new Set((await CodecDB.getAdopted(domainId)).map(e => e.postId));
   const domainMap = Object.fromEntries(state.domains.map(d => [d.id, d]));
   $('forum-list').innerHTML = posts.length ? posts.map(p => {
     const d = domainMap[p.domainId];
+    const didAdopt = adopted.has(p.id);
+    const didLike = liked.has(p.id);
     return `
     <div class="forum-post">
       <div class="forum-head">
@@ -779,20 +805,22 @@ async function loadForum() {
       <div class="forum-subtext"><b>言外之意：</b>${esc(p.潜台词)}</div>
       ${p.应对 ? `<div class="forum-advice"><b>应对经验：</b>${esc(p.应对)}</div>` : ''}
       <div class="forum-actions">
-        <button onclick="likeForumPost('${esc(p.id)}', this)">有共鸣（${p.likes || 0}）</button>
-        ${p.adopted
+        <button ${didLike ? 'disabled' : ''} onclick="likeForumPost('${esc(p.id)}', this)">有共鸣（${p.likes || 0}）</button>
+        ${didAdopt
           ? `<button onclick="unadoptForumPost('${esc(p.id)}')" title="从我的语料库移除，之后解码不再参考">✓ 已收入语料库（点击取消）</button>`
           : `<button onclick="adoptForumPost('${esc(p.id)}')">收入我的语料库</button>`}
       </div>
     </div>`;
-  }).join('') : '<div class="chat-empty">这个板块还没有帖子，来发第一帖吧。</div>';
+  }).join('') : '<div class="chat-empty">这个板块还没有人发帖。你发的帖子，别人打开也能看到。</div>';
+  state.forumPosts = posts;
 }
 
 window.likeForumPost = async function (id, btn) {
   btn.disabled = true;
   try {
-    const post = await CodecDB.likePost(id);
-    if (post) btn.textContent = `有共鸣（${post.likes}）`;
+    const r = await apiPost(`/api/forum/${encodeURIComponent(id)}/like`);
+    await CodecDB.rememberLike(id);
+    if (r.post) btn.textContent = `有共鸣（${r.post.likes}）`;
     sfxClick();
   } catch (e) {
     btn.disabled = false;
@@ -802,12 +830,12 @@ window.likeForumPost = async function (id, btn) {
 
 window.adoptForumPost = async function (id) {
   try {
-    const post = await CodecDB.adoptPost(id);
-    if (post) {
-      sfxCard();
-      alert('✓ 已收入本机语料库\n之后该领域的每次解码都会参考这条真实案例');
-      loadForum();
-    }
+    const post = (state.forumPosts || []).find(p => p.id === id);
+    if (!post) return alert('帖子已不在列表里，请刷新后再试');
+    await CodecDB.adoptShared(post);
+    sfxCard();
+    alert('✓ 已收入这台浏览器的语料库\n之后该领域的每次解码都会参考这条案例');
+    loadForum();
   } catch (e) {
     alert('收入失败：' + e.message);
   }
@@ -815,8 +843,9 @@ window.adoptForumPost = async function (id) {
 
 window.unadoptForumPost = async function (id) {
   try {
-    const post = await CodecDB.unadoptPost(id);
-    if (post) { sfxClick(); loadForum(); }
+    await CodecDB.unadoptShared(id);
+    sfxClick();
+    loadForum();
   } catch (e) {
     alert('取消失败：' + e.message);
   }
@@ -843,7 +872,7 @@ async function submitPost() {
   try {
     const author = $('post-author').value.trim();
     if (author) await CodecDB.setMeta('forumAuthor', author);
-    r = await CodecDB.addPost({
+    r = await apiPost('/api/forum', {
       domainId: $('post-domain').value,
       author,
       原话, 潜台词,
@@ -871,8 +900,9 @@ async function refreshDataStats() {
     <div>人物档案：<b>${s.bosses}</b></div>
     <div>纠错语料：<b>${s.corpus}</b></div>
     <div>会话：<b>${s.chats}</b>（${s.messages} 条消息）</div>
-    <div>论坛帖：<b>${s.forum}</b> · 已收入案例：<b>${s.adopted}</b></div>
-    <div>累计解码：<b>${s.decodeCount}</b> 条</div>`;
+    <div>已收入案例：<b>${s.adopted}</b></div>
+    <div>累计解码：<b>${s.decodeCount}</b> 条</div>
+    <div>论坛帖在公共看板上，不包含在这份备份里。</div>`;
 }
 
 async function openDataWindow() {
@@ -920,7 +950,7 @@ async function importLocalData(ev) {
 }
 
 async function resetLocalData() {
-  if (!confirm('将清空本机档案、会话和自建帖子，并重新载入演示种子。此操作不可撤销。')) return;
+  if (!confirm('将清空这台浏览器里的档案、会话和收入的案例。公共论坛不受影响。此操作不可撤销。')) return;
   try {
     const seeds = await api('/api/seeds');
     await CodecDB.resetToSeeds(seeds);
@@ -933,7 +963,7 @@ async function resetLocalData() {
     if (state.mode === 'forum') await loadForum();
     await refreshDataStats();
     sfxCard();
-    alert('✓ 已恢复为演示种子');
+    alert('✓ 本机数据已清空');
   } catch (e) {
     alert('重置失败：' + e.message);
   }

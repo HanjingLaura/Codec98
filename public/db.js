@@ -394,11 +394,81 @@ async function resetToSeeds(seeds) {
   await ensureSeeded(seeds);
 }
 
+async function deleteById(storeName, id) {
+  return withStore(storeName, 'readwrite', s => s.delete(id));
+}
+
+// 去掉曾经写进浏览器的预置老板（张总 / 刘老板）和预置论坛帖
+async function dropBundledSamples() {
+  if (await getMeta('droppedSamples', false)) return;
+  const bosses = await getAll('bosses');
+  for (const b of bosses) {
+    const bundled = b.id === 'boss_zhang'
+      || b.name === '刘老板'
+      || (b.name === '张总' && b.createdAt === '2026-06-27T09:00:00Z');
+    if (!bundled) continue;
+    const entries = await getBossEntries(b.id);
+    for (const e of entries) await deleteById('corpus', e.id);
+    await deleteById('bosses', b.id);
+  }
+  const posts = await getAll('forum');
+  for (const p of posts) {
+    if (!p.mine || String(p.id).startsWith('post_seed')) await deleteById('forum', p.id);
+  }
+  await setMeta('droppedSamples', true);
+}
+
+async function myForumPosts() {
+  return (await getAll('forum')).filter(p => p.mine && !String(p.id).startsWith('post_seed'));
+}
+
+function deleteForumPost(id) {
+  return deleteById('forum', id);
+}
+
+async function rememberLike(postId) {
+  const ids = await getMeta('likedPosts', []);
+  if (!ids.includes(postId)) {
+    ids.push(postId);
+    await setMeta('likedPosts', ids.slice(-500));
+  }
+  return ids;
+}
+
+function likedPosts() {
+  return getMeta('likedPosts', []);
+}
+
+async function adoptShared(post) {
+  const rows = await getAll('adopted');
+  if (rows.some(e => e.postId === post.id)) return post;
+  await withStore('adopted', 'readwrite', s => s.put({
+    id: uid('adopt'),
+    postId: post.id,
+    domainId: post.domainId,
+    原话: clip(post.原话, LIMITS.原话),
+    场景: clip(post.场景, LIMITS.场景),
+    潜台词: clip(post.潜台词, LIMITS.潜台词),
+    应对: clip(post.应对, LIMITS.应对),
+    source: 'forum',
+    time: new Date().toISOString()
+  }));
+  return post;
+}
+
+async function unadoptShared(postId) {
+  const rows = await getAll('adopted');
+  const hit = rows.find(e => e.postId === postId);
+  if (hit) await deleteById('adopted', hit.id);
+}
+
 window.CodecDB = {
   uid, bossLevel, ensureSeeded, IMPORT_MAX_BYTES,
   listBosses, getBoss, addBoss,
   getBossEntries, addEntry,
   listSessions, getSession, createSession, appendMessage,
   listPosts, addPost, likePost, adoptPost, unadoptPost, getAdopted,
+  dropBundledSamples, myForumPosts, deleteForumPost, rememberLike, likedPosts,
+  adoptShared, unadoptShared,
   getMeta, setMeta, stats, exportAll, importAll, resetToSeeds
 };
