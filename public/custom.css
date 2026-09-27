@@ -443,30 +443,105 @@ menu[role=tablist] a { display: block; text-align: center; }
 /* ---------- 移动端适配 ---------- */
 @media (max-width: 720px) {
   html { scrollbar-gutter: auto; }
-  html, body { overflow-x: hidden; min-height: 100dvh; }
-  #desktop {
+  html, body {
+    overflow: hidden;
+    height: 100%;
     min-height: 100dvh;
+  }
+  #desktop {
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     padding: 8px 8px calc(42px + env(safe-area-inset-bottom));
     max-width: 100%;
     box-sizing: border-box;
+    overflow: hidden;
   }
   #workspace {
-    flex: 1 0 auto;
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
   }
-  /* 窗口铺到任务栏上方，短内容不再在中间空出一大块 */
   #win-decoder {
-    flex: 1 0 auto;
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     margin-bottom: 0;
+    overflow: hidden;
   }
-  #win-decoder > .title-bar { flex: none; }
-  #win-decoder > .window-body { flex: 1 0 auto; }
-  #workspace:has(#result-area:not(:empty)) #win-decoder { flex: 0 0 auto; }
+  #win-decoder > .title-bar,
+  #win-decoder menu[role=tablist] { flex: none; }
+  #win-decoder > .window-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #win-decoder .window[role=tabpanel] {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #win-decoder .window[role=tabpanel] > .window-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #panel-decode, #panel-chat, #panel-forum {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #panel-decode > .field-row-stacked:first-child {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 6px;
+  }
+  #input-text {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 96px;
+    resize: none;
+  }
+  #chat-log {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 120px;
+  }
+  #forum-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+  }
+  /* 出了报告就放开整页滚动，避免结果被一屏高度裁掉 */
+  html:has(#result-area:not(:empty)),
+  html:has(#result-area:not(:empty)) body {
+    overflow: auto;
+    height: auto;
+  }
+  html:has(#result-area:not(:empty)) #desktop {
+    height: auto;
+    max-height: none;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  #workspace:has(#result-area:not(:empty)) #win-decoder,
+  #workspace:has(#result-area:not(:empty)) #input-text {
+    flex: none;
+  }
   .window, .main-window { max-width: 100%; }
   .main-window > .window-body,
   .main-window .window[role=tabpanel] > .window-body { margin: 6px; }
@@ -532,9 +607,7 @@ menu[role=tablist] a { display: block; text-align: center; }
   .radar-wrap svg { width: min(180px, 100%); height: auto; }
 
   .meter { min-width: 100%; }
-  #chat-log { height: min(220px, 34dvh); }
   .chat-body { max-width: 86%; }
-  #forum-list { max-height: none; }
   .data-actions { justify-content: stretch; }
   .data-actions button { flex: 1 1 100%; }
 
