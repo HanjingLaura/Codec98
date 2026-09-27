@@ -591,9 +591,25 @@ menu[role=tablist] a { display: block; text-align: center; }
   }
 
   button { min-height: 34px; }
-  .title-bar-controls button { min-height: 0; }
+  .title-bar-controls button { min-height: 0; height: 14px; padding: 0; color: transparent; text-shadow: none; }
   .chat-use-btn { min-height: 28px; }
   input[type=text], textarea, select { font-size: 16px; }
+  /* 98.css 把 select 锁在 21px、按钮用像素字体的透明字，手机上中文会被裁成别的字 */
+  select, option,
+  .window-body button,
+  #taskbar button,
+  #start-menu button {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: auto;
+    color: #222;
+    text-shadow: none;
+    height: auto;
+    line-height: 1.4;
+  }
+  select, option {
+    min-height: 36px;
+    padding: 6px 28px 6px 8px;
+  }
 
   .boss-window, .quiz-window, .correct-window, .post-window, .data-window {
     top: 8px;
